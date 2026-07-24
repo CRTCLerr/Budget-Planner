@@ -80,6 +80,7 @@ class BudgetsPage(ScrollablePage):
         self.event_amount_var = tk.StringVar()
         self.event_date_var = tk.StringVar()
         self.category_kind_var = tk.StringVar(value="expense")
+        self.show_inactive_categories_var = tk.BooleanVar(value=False)
         self.selected_category_var = tk.StringVar()
         self.category_name_var = tk.StringVar()
         self.template_category_var = tk.StringVar()
@@ -249,7 +250,8 @@ class BudgetsPage(ScrollablePage):
 
     def _refresh_category_manager(self) -> None:
         kind = self.category_kind_var.get() or "expense"
-        values = self.app.category_repo.names(kind)
+        include_inactive = bool(self.show_inactive_categories_var.get())
+        values = self.app.category_repo.names(kind, include_inactive=include_inactive)
         self.category_select_combo.configure(values=values)
 
         current = self.selected_category_var.get().strip()
@@ -304,13 +306,14 @@ class BudgetsPage(ScrollablePage):
     def _load_selected_category_details(self) -> None:
         selected_name = self.selected_category_var.get().strip()
         kind = self.category_kind_var.get().strip() or "expense"
-        category = self.app.category_repo.get(selected_name, kind, include_inactive=False)
+        category = self.app.category_repo.get(selected_name, kind, include_inactive=True)
 
         if category is None:
             self.category_name_var.set("")
             self.category_group_var.set("wants")
             self.category_debt_type_var.set("None")
             self.category_is_savings_var.set(False)
+            self.category_status_var.set("Status: N/A")
             self._sync_category_detail_controls()
             return
 
@@ -318,7 +321,11 @@ class BudgetsPage(ScrollablePage):
         self.category_group_var.set(category.advisor_group)
         self.category_debt_type_var.set(CATEGORY_DEBT_CODE_TO_LABEL.get(category.debt_type, "None"))
         self.category_is_savings_var.set(category.is_savings)
+        self.category_status_var.set("Status: Active" if category.active else "Status: Archived")
         self._sync_category_detail_controls()
+
+    def _on_show_inactive_toggle(self) -> None:
+        self._refresh_category_manager()
 
     def _sync_category_detail_controls(self) -> None:
         is_income = self.category_kind_var.get().strip() == "income"
@@ -430,6 +437,27 @@ class BudgetsPage(ScrollablePage):
             self.app.refresh_all()
 
         messagebox.showinfo("Category Archived", f"Archived '{current_name}' from active categories.")
+
+    def _reactivate_category(self) -> None:
+        current_name = self.selected_category_var.get().strip()
+        kind = self.category_kind_var.get().strip() or "expense"
+
+        if not current_name:
+            messagebox.showerror("No Category", "Select a category to reactivate.")
+            return
+
+        try:
+            category = self.app.category_repo.reactivate_category(current_name, kind)
+        except ValueError as exc:
+            messagebox.showerror("Reactivate Failed", str(exc))
+            return
+
+        self.selected_category_var.set(category.name)
+
+        if hasattr(self.app, "refresh_all"):
+            self.app.refresh_all()
+
+        messagebox.showinfo("Category Reactivated", f"Reactivated '{category.name}'.")
 
     def _import_template_category(self) -> None:
         kind = self.category_kind_var.get().strip() or "expense"
@@ -904,6 +932,29 @@ class BudgetsPage(ScrollablePage):
         self.category_select_combo.grid(row=1, column=1, sticky="ew", pady=(2, 10), padx=(0, 16))
         self.category_select_combo.bind("<<ComboboxSelected>>", lambda e: self._on_category_selected())
 
+        self.category_status_var = tk.StringVar(value="Status: N/A")
+        tk.Label(
+            grid,
+            textvariable=self.category_status_var,
+            font=(FONT, 9),
+            fg=TEXT_SEC,
+            bg=CARD_BG,
+        ).grid(row=0, column=3, sticky="w")
+
+        tk.Checkbutton(
+            grid,
+            text="Show archived categories",
+            variable=self.show_inactive_categories_var,
+            onvalue=True,
+            offvalue=False,
+            command=self._on_show_inactive_toggle,
+            font=(FONT, 9),
+            fg=TEXT_SEC,
+            bg=CARD_BG,
+            activebackground=CARD_BG,
+            selectcolor=CARD_BG,
+        ).grid(row=1, column=3, sticky="w", pady=(2, 10))
+
         tk.Label(grid, text="Name", font=(FONT, 10, "bold"), fg=TEXT_SEC, bg=CARD_BG).grid(row=0, column=2, sticky="w")
         tk.Entry(
             grid,
@@ -993,6 +1044,20 @@ class BudgetsPage(ScrollablePage):
             padx=10,
             pady=4,
             command=self._delete_category,
+        ).pack(side="left", padx=(8, 0))
+
+        tk.Button(
+            actions,
+            text="Reactivate Category",
+            font=(FONT, 10, "bold"),
+            bg="#0f766e",
+            fg="#ffffff",
+            activebackground="#115e59",
+            relief="flat",
+            cursor="hand2",
+            padx=10,
+            pady=4,
+            command=self._reactivate_category,
         ).pack(side="left", padx=(8, 0))
 
         extras = tk.Frame(manager, bg=CARD_BG)
