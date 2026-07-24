@@ -83,7 +83,7 @@ class BudgetsPage(ScrollablePage):
         self.show_inactive_categories_var = tk.BooleanVar(value=False)
         self.selected_category_var = tk.StringVar()
         self.category_name_var = tk.StringVar()
-        self.template_category_var = tk.StringVar()
+        self.default_category_var = tk.StringVar()
         self.suggestion_category_var = tk.StringVar()
         self.category_group_var = tk.StringVar(value="wants")
         self.category_debt_type_var = tk.StringVar(value="None")
@@ -264,23 +264,23 @@ class BudgetsPage(ScrollablePage):
             self.selected_category_var.set("")
             self.category_select_combo.set("")
 
-        self._refresh_template_options(kind)
+        self._refresh_default_options(kind)
         self._refresh_suggestion_options(kind)
         self._load_selected_category_details()
 
-    def _refresh_template_options(self, kind: str) -> None:
-        values = self.app.category_repo.available_template_names(kind)
-        self.template_select_combo.configure(values=values)
+    def _refresh_default_options(self, kind: str) -> None:
+        values = self.app.category_repo.available_default_names(kind)
+        self.default_select_combo.configure(values=values)
 
-        current = self.template_category_var.get().strip()
+        current = self.default_category_var.get().strip()
         if current and current in values:
-            self.template_select_combo.set(current)
+            self.default_select_combo.set(current)
         elif values:
-            self.template_category_var.set(values[0])
-            self.template_select_combo.set(values[0])
+            self.default_category_var.set(values[0])
+            self.default_select_combo.set(values[0])
         else:
-            self.template_category_var.set("")
-            self.template_select_combo.set("")
+            self.default_category_var.set("")
+            self.default_select_combo.set("")
 
     def _refresh_suggestion_options(self, kind: str) -> None:
         suggestions = self.app.category_repo.list_suggestions(kind)
@@ -459,20 +459,34 @@ class BudgetsPage(ScrollablePage):
 
         messagebox.showinfo("Category Reactivated", f"Reactivated '{category.name}'.")
 
-    def _import_template_category(self) -> None:
+    def _add_default_category(self) -> None:
         kind = self.category_kind_var.get().strip() or "expense"
-        name = self.template_category_var.get().strip()
+        name = self.default_category_var.get().strip()
         if not name:
-            messagebox.showerror("No Template", "Select a template category to import.")
+            messagebox.showerror("No Default", "Select a default category to add.")
             return
 
-        self.app.category_repo.import_templates([name], kind)
+        self.app.category_repo.add_default_categories([name], kind)
         self.selected_category_var.set(name)
 
         if hasattr(self.app, "refresh_all"):
             self.app.refresh_all()
 
-        messagebox.showinfo("Template Imported", f"Imported '{name}' to active {kind} categories.")
+        messagebox.showinfo("Default Added", f"Added '{name}' to active {kind} categories.")
+
+    def _ignore_default_category(self) -> None:
+        kind = self.category_kind_var.get().strip() or "expense"
+        name = self.default_category_var.get().strip()
+        if not name:
+            messagebox.showerror("No Default", "Select a default category to hide.")
+            return
+
+        self.app.category_repo.ignore_default(name, kind)
+
+        if hasattr(self.app, "refresh_all"):
+            self.app.refresh_all()
+
+        messagebox.showinfo("Default Hidden", f"Hid '{name}' from the default picker.")
 
     def _import_suggestion_category(self) -> None:
         kind = self.category_kind_var.get().strip() or "expense"
@@ -1064,19 +1078,19 @@ class BudgetsPage(ScrollablePage):
         extras.pack(fill="x", pady=(12, 0))
         extras.grid_columnconfigure(1, weight=1)
 
-        tk.Label(extras, text="Optional Templates", font=(FONT, 10, "bold"), fg=TEXT_SEC, bg=CARD_BG).grid(row=0, column=0, sticky="w")
-        self.template_select_combo = ttk.Combobox(
+        tk.Label(extras, text="Default Categories", font=(FONT, 10, "bold"), fg=TEXT_SEC, bg=CARD_BG).grid(row=0, column=0, sticky="w")
+        self.default_select_combo = ttk.Combobox(
             extras,
-            textvariable=self.template_category_var,
+            textvariable=self.default_category_var,
             values=[],
             state="readonly",
             width=32,
             font=(FONT, 10),
         )
-        self.template_select_combo.grid(row=0, column=1, sticky="ew", padx=(10, 10))
+        self.default_select_combo.grid(row=0, column=1, sticky="ew", padx=(10, 10))
         tk.Button(
             extras,
-            text="Import Template",
+            text="Add Default",
             font=(FONT, 10, "bold"),
             bg=PRIMARY,
             fg="#ffffff",
@@ -1085,8 +1099,22 @@ class BudgetsPage(ScrollablePage):
             cursor="hand2",
             padx=10,
             pady=4,
-            command=self._import_template_category,
+            command=self._add_default_category,
         ).grid(row=0, column=2, sticky="e")
+
+        tk.Button(
+            extras,
+            text="Hide Default",
+            font=(FONT, 10, "bold"),
+            bg="#475569",
+            fg="#ffffff",
+            activebackground="#334155",
+            relief="flat",
+            cursor="hand2",
+            padx=10,
+            pady=4,
+            command=self._ignore_default_category,
+        ).grid(row=0, column=3, sticky="e", padx=(8, 0))
 
         tk.Label(extras, text="History Suggestions", font=(FONT, 10, "bold"), fg=TEXT_SEC, bg=CARD_BG).grid(row=1, column=0, sticky="w", pady=(10, 0))
         self.suggestion_select_combo = ttk.Combobox(
