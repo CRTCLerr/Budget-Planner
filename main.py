@@ -15,7 +15,7 @@ from pathlib import Path
 from app_settings import load_settings
 from data.database import Database
 from ui.app import App
-from updater import schedule_auto_update_check
+from updater import notify_post_update_status, schedule_auto_update_check
 
 
 def resolve_db_path() -> str:
@@ -46,6 +46,7 @@ def main() -> None:
 
     # Start Tkinter app
     app = App(db, settings)
+    app.after(500, lambda: notify_post_update_status(app))
     if settings.auto_update_check:
         schedule_auto_update_check(app)
     app.mainloop()

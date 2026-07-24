@@ -11,6 +11,7 @@ from pathlib import Path
 @dataclass
 class AppSettings:
     auto_update_check: bool = True
+    auto_update_install: bool = True
 
 
 def _settings_path() -> Path:
@@ -29,12 +30,16 @@ def load_settings() -> AppSettings:
     except (OSError, json.JSONDecodeError):
         return AppSettings()
 
-    return AppSettings(auto_update_check=bool(payload.get("auto_update_check", True)))
+    return AppSettings(
+        auto_update_check=bool(payload.get("auto_update_check", True)),
+        auto_update_install=bool(payload.get("auto_update_install", True)),
+    )
 
 
 def save_settings(settings: AppSettings) -> None:
     path = _settings_path()
     payload = {
         "auto_update_check": bool(settings.auto_update_check),
+        "auto_update_install": bool(settings.auto_update_install),
     }
     path.write_text(json.dumps(payload, indent=2), encoding="utf-8")

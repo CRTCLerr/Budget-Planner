@@ -29,6 +29,7 @@ class SettingsPage(ScrollablePage):
         self.app = app
 
         self.var_auto_update = tk.BooleanVar(value=bool(self.app.settings.auto_update_check))
+        self.var_auto_install = tk.BooleanVar(value=bool(self.app.settings.auto_update_install))
         self._build_ui()
 
     def _build_ui(self) -> None:
@@ -57,7 +58,7 @@ class SettingsPage(ScrollablePage):
             card,
             text=(
                 "Check GitHub releases for new versions. "
-                "You will be notified and can open the official download page."
+                "You will be notified, the update can download in-app, and the app will restart after apply."
             ),
             font=(FONT, 10),
             fg=TEXT_SEC,
@@ -70,6 +71,20 @@ class SettingsPage(ScrollablePage):
             card,
             text="Check for updates automatically at startup",
             variable=self.var_auto_update,
+            onvalue=True,
+            offvalue=False,
+            command=self._save_auto_update_setting,
+            font=(FONT, 10),
+            fg=TEXT,
+            bg=CARD_BG,
+            activebackground=CARD_BG,
+            selectcolor=CARD_BG,
+        ).pack(anchor="w", pady=(0, 14))
+
+        tk.Checkbutton(
+            card,
+            text="Auto-install updates after confirmation",
+            variable=self.var_auto_install,
             onvalue=True,
             offvalue=False,
             command=self._save_auto_update_setting,
@@ -97,4 +112,5 @@ class SettingsPage(ScrollablePage):
 
     def _save_auto_update_setting(self) -> None:
         self.app.settings.auto_update_check = bool(self.var_auto_update.get())
+        self.app.settings.auto_update_install = bool(self.var_auto_install.get())
         save_settings(self.app.settings)

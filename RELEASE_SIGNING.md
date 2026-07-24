@@ -49,6 +49,11 @@ signtool verify /pa /v "dist\\Budget Planner\\Budget Planner.exe"
 4. Upload only signed files to GitHub Releases.
 5. Use semantic version tags (example: `v0.2.0`).
 
+## Asset format for in-app updater
+1. Recommended: include a signed `.zip` release asset for automatic in-place update + restart.
+2. Optional: signed `.exe` or `.msi` installers are also supported.
+3. Keep release tags versioned (example: `v1.2.3`) so update comparisons are reliable.
+
 ## Security note
 - Never publish private signing keys.
 - Use hardware-backed key storage (required for EV; strongly recommended for all).
