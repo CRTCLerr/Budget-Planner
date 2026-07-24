@@ -16,7 +16,7 @@ git config user.email "michaellaroche2010@gmail.com"
 5. Add your GitHub remote and publish:
 
 ```powershell
-git remote add origin https://github.com/<your-github-username>/Budget-Planner.git
+git remote add origin https://github.com/CRTCLerr/Budget-Planner.git
 git push -u origin main
 ```
 
