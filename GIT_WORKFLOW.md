@@ -4,12 +4,20 @@ This repository uses a simple branch + pull request workflow.
 
 ## One-time setup
 1. Initialize repository (already done).
-2. Ensure `.gitignore` exists before first commit.
-3. Set your Git identity:
+2. Create the GitHub repository (already done): `Budget-Planner`.
+3. Ensure `.gitignore` exists before first commit.
+4. Set your Git identity:
 
 ```powershell
-git config user.name "Your Name"
-git config user.email "your-email@example.com"
+git config user.name "Michael LaRoche"
+git config user.email "michaellaroche2010@gmail.com"
+```
+
+5. Add your GitHub remote and publish:
+
+```powershell
+git remote add origin https://github.com/<your-github-username>/Budget-Planner.git
+git push -u origin main
 ```
 
 ## First commit
