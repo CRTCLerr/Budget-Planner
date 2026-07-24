@@ -3,13 +3,10 @@
 from __future__ import annotations
 
 import json
-import os
-import tempfile
 import threading
 import urllib.error
 import urllib.request
 import webbrowser
-from pathlib import Path
 from tkinter import messagebox
 
 from app_version import APP_VERSION
@@ -72,34 +69,18 @@ def _fetch_latest_release() -> dict | None:
         return None
 
 
-def _download_asset(url: str, name: str) -> Path | None:
-    download_dir = Path(tempfile.gettempdir()) / "BudgetPlannerUpdates"
-    download_dir.mkdir(parents=True, exist_ok=True)
-    destination = download_dir / name
-
-    req = urllib.request.Request(
-        url,
-        headers={
-            "Accept": "application/octet-stream",
-            "User-Agent": "BudgetPlanner-Updater",
-        },
-    )
-
-    try:
-        with urllib.request.urlopen(req, timeout=60) as resp, open(destination, "wb") as fh:
-            fh.write(resp.read())
-    except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError, OSError):
-        return None
-
-    return destination
-
-
-def _prompt_update_flow(root, release: dict) -> None:
+def _prompt_update_flow(root, release: dict, prompt_if_latest: bool) -> None:
     tag = str(release.get("tag_name", ""))
     html_url = str(release.get("html_url", "https://github.com"))
     assets = list(release.get("assets", []))
 
     if not _is_newer(tag, APP_VERSION):
+        if prompt_if_latest:
+            messagebox.showinfo(
+                "No Updates",
+                f"You are up to date. Current version: {APP_VERSION}",
+                parent=root,
+            )
         return
 
     wants_update = messagebox.askyesno(
@@ -107,7 +88,7 @@ def _prompt_update_flow(root, release: dict) -> None:
         (
             f"A new version ({tag}) is available.\n"
             f"Current version: {APP_VERSION}\n\n"
-            "Download and install now?"
+            "Open download page now?"
         ),
         parent=root,
     )
@@ -117,52 +98,43 @@ def _prompt_update_flow(root, release: dict) -> None:
 
     chosen = _pick_windows_asset(assets)
     if chosen is None:
-        webbrowser.open(html_url)
         messagebox.showinfo(
             "Update",
-            "No direct Windows installer asset was found. Opening the release page.",
+            "No direct Windows installer asset was found. Opening release page.",
             parent=root,
         )
+        webbrowser.open(html_url)
         return
 
-    name = str(chosen.get("name", "update_asset"))
     url = str(chosen.get("browser_download_url", ""))
     if not url:
         webbrowser.open(html_url)
         return
 
-    downloaded = _download_asset(url, name)
-    if downloaded is None:
-        webbrowser.open(html_url)
-        messagebox.showerror(
-            "Update Failed",
-            "Could not download the update automatically. Opening release page.",
-            parent=root,
-        )
-        return
-
-    messagebox.showinfo(
-        "Update Ready",
-        (
-            f"Update downloaded to:\n{downloaded}\n\n"
-            "The installer will launch now. Close the app after installer starts."
-        ),
-        parent=root,
-    )
-
-    try:
-        os.startfile(str(downloaded))  # type: ignore[attr-defined]
-    except OSError:
-        webbrowser.open(html_url)
+    webbrowser.open(url)
 
 
-def schedule_auto_update_check(root) -> None:
-    """Start a background release check and prompt user if update exists."""
+def check_for_updates(root, prompt_if_latest: bool = True) -> None:
+    """Check GitHub releases in background and prompt user in the UI thread."""
 
     def worker() -> None:
         release = _fetch_latest_release()
         if not release:
+            if prompt_if_latest:
+                root.after(
+                    0,
+                    lambda: messagebox.showerror(
+                        "Update Check Failed",
+                        "Could not contact GitHub Releases right now.",
+                        parent=root,
+                    ),
+                )
             return
-        root.after(0, lambda: _prompt_update_flow(root, release))
+        root.after(0, lambda: _prompt_update_flow(root, release, prompt_if_latest))
 
     threading.Thread(target=worker, daemon=True).start()
+
+
+def schedule_auto_update_check(root) -> None:
+    """Run a startup check that only notifies when an update is available."""
+    check_for_updates(root, prompt_if_latest=False)

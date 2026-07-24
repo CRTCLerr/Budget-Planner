@@ -12,6 +12,7 @@ import sys
 import os
 from pathlib import Path
 
+from app_settings import load_settings
 from data.database import Database
 from ui.app import App
 from updater import schedule_auto_update_check
@@ -38,13 +39,15 @@ def main() -> None:
     """Application bootstrap."""
 
     db_path = resolve_db_path()
+    settings = load_settings()
 
     # Initialize database
     db = Database(db_path)
 
     # Start Tkinter app
-    app = App(db)
-    schedule_auto_update_check(app)
+    app = App(db, settings)
+    if settings.auto_update_check:
+        schedule_auto_update_check(app)
     app.mainloop()
 
 
