@@ -14,6 +14,7 @@ from pathlib import Path
 
 from data.database import Database
 from ui.app import App
+from updater import schedule_auto_update_check
 
 
 def resolve_db_path() -> str:
@@ -43,6 +44,7 @@ def main() -> None:
 
     # Start Tkinter app
     app = App(db)
+    schedule_auto_update_check(app)
     app.mainloop()
 
 
