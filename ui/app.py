@@ -21,7 +21,7 @@ import tkinter as tk
 from datetime import datetime
 from typing import Dict, Type
 
-from app_settings import AppSettings
+from core.app_settings import AppSettings
 from data.database import Database
 from data.categories import CategoryRepository
 from data.transactions import TransactionRepository

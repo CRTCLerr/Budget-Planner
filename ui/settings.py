@@ -5,8 +5,8 @@ from __future__ import annotations
 import tkinter as tk
 from typing import TYPE_CHECKING
 
-from app_settings import save_settings
-from updater import check_for_updates
+from core.app_settings import save_settings
+from core.updater import check_for_updates
 from ui.widgets import BG, CARD_BG, FONT, TEXT, TEXT_SEC, BORDER, ScrollablePage
 
 if TYPE_CHECKING:

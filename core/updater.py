@@ -12,7 +12,7 @@ import urllib.request
 from pathlib import Path
 from tkinter import messagebox
 
-from app_version import APP_VERSION
+from core.app_version import APP_VERSION
 
 GITHUB_OWNER = "CRTCLerr"
 GITHUB_REPO = "Budget-Planner"

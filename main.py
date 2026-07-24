@@ -12,10 +12,10 @@ import sys
 import os
 from pathlib import Path
 
-from app_settings import load_settings
+from core.app_settings import load_settings
 from data.database import Database
 from ui.app import App
-from updater import notify_post_update_status, schedule_auto_update_check
+from core.updater import notify_post_update_status, schedule_auto_update_check
 
 
 def resolve_db_path() -> str:
