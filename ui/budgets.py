@@ -19,7 +19,7 @@ from typing import TYPE_CHECKING, Dict, List
 
 from ui.widgets import (
     Card, ScrollablePage, FONT, TEXT, TEXT_SEC, CARD_BG, BG,
-    PRIMARY, PRIMARY_HOVER,
+    PRIMARY, PRIMARY_HOVER, WARNING, DANGER,
 )
 from data.transactions import TransactionRepository
 from data.debt import DebtRepository
@@ -98,6 +98,8 @@ class BudgetsPage(ScrollablePage):
         self.slider_vars: Dict[str, tk.IntVar] = {}
         self.slider_amount_labels: Dict[str, tk.Label] = {}
         self.slider_scales: Dict[str, ttk.Scale] = {}
+        self.total_summary_var = tk.StringVar(value="0.00% | $0")
+        self.total_summary_label: tk.Label | None = None
         self._updating_sliders = False  # guard to avoid recursion
         self._active_slider = None
         self._active_slider_max_ticks = 0
@@ -165,10 +167,55 @@ class BudgetsPage(ScrollablePage):
         self.income_override_var.set(f"{self.last_month_income:.2f}")
         self.effective_income = self._get_effective_income()
         self._load_sliders_from_saved_budgets()
+        self._enforce_total_cap()
         self._update_all_amount_labels()
 
     def _expense_category_names(self) -> List[str]:
         return self.app.category_repo.names("expense")
+
+    def _slider_total_percent(self) -> float:
+        return sum(var.get() * 0.25 for var in self.slider_vars.values())
+
+    def _slider_total_amount(self) -> float:
+        income = self._get_effective_income()
+        total_percent = self._slider_total_percent()
+        return income * (total_percent / 100.0) if income > 0 else 0.0
+
+    def _refresh_total_summary(self) -> None:
+        total_percent = self._slider_total_percent()
+        total_amount = self._slider_total_amount()
+
+        if total_percent >= 100.0:
+            color = DANGER
+        elif total_percent >= 79.9:
+            color = WARNING
+        else:
+            color = TEXT
+
+        self.total_summary_var.set(f"{total_percent:.2f}% | ${int(round(total_amount)):,d}")
+        if self.total_summary_label is not None:
+            self.total_summary_label.configure(fg=color)
+
+    def _enforce_total_cap(self) -> None:
+        total_percent = self._slider_total_percent()
+        if total_percent > 100.0 and self.slider_vars:
+            overflow_ticks = int(round((total_percent - 100.0) / 0.25))
+            if overflow_ticks > 0:
+                self._updating_sliders = True
+                try:
+                    for category in sorted(self.slider_vars, key=lambda name: self.slider_vars[name].get(), reverse=True):
+                        if overflow_ticks <= 0:
+                            break
+                        current_ticks = self.slider_vars[category].get()
+                        if current_ticks <= 0:
+                            continue
+                        reduction = min(current_ticks, overflow_ticks)
+                        self.slider_vars[category].set(current_ticks - reduction)
+                        overflow_ticks -= reduction
+                finally:
+                    self._updating_sliders = False
+
+        self._refresh_total_summary()
 
     def _load_sliders_from_saved_budgets(self) -> None:
         income = self._get_effective_income()
@@ -187,6 +234,8 @@ class BudgetsPage(ScrollablePage):
                 var.set(ticks)
         finally:
             self._updating_sliders = False
+
+        self._enforce_total_cap()
 
     def _rebuild_slider_rows(self) -> None:
         if self.slider_rows_frame is None:
@@ -860,6 +909,15 @@ class BudgetsPage(ScrollablePage):
             bg=CARD_BG,
         ).pack(anchor="w", pady=(0, 6))
 
+        self.total_summary_label = tk.Label(
+            manual_card,
+            textvariable=self.total_summary_var,
+            font=(FONT, 11, "bold"),
+            fg=TEXT,
+            bg=CARD_BG,
+        )
+        self.total_summary_label.pack(anchor="w", pady=(0, 6))
+
         # Dynamic mode checkbox
         dyn_frame = tk.Frame(manual_card, bg=CARD_BG)
         dyn_frame.pack(fill="x", pady=(0, 8))
@@ -1276,6 +1334,7 @@ class BudgetsPage(ScrollablePage):
         finally:
             self._updating_sliders = False
 
+        self._enforce_total_cap()
         self._update_all_amount_labels()
 
     # ------------------------------------------------------------------
@@ -1327,6 +1386,7 @@ class BudgetsPage(ScrollablePage):
         finally:
             self._updating_sliders = False
 
+        self._enforce_total_cap()
         self._update_all_amount_labels()
 
     def _clamp_static(self, changed_cat: str, new_ticks: int) -> None:
@@ -1408,6 +1468,8 @@ class BudgetsPage(ScrollablePage):
             if label is not None:
                 label.config(text=f"${amount_rounded:,d}")
 
+        self._refresh_total_summary()
+
     def _on_slider_press(self, category: str):
         """Record which slider is active and compute its maximum allowed ticks."""
         self._active_slider = category
@@ -1444,6 +1506,7 @@ class BudgetsPage(ScrollablePage):
                 self.slider_vars[category].set(self._active_slider_max_ticks)
 
             self._active_slider = None
+            self._enforce_total_cap()
             self._update_all_amount_labels()
 
     # ------------------------------------------------------------------
@@ -1474,6 +1537,11 @@ class BudgetsPage(ScrollablePage):
         messagebox.showinfo("Manual Budget Applied", "Manual slider-based budget has been applied to your categories.")
 
     def refresh(self) -> None:
+        # Keep the user's viewport stable while controls are rebuilt.
+        scroll_pos = self._scroll_canvas.yview()[0]
         self._refresh_category_manager()
         self._rebuild_slider_rows()
+        self.update_idletasks()
+        self._scroll_canvas.yview_moveto(scroll_pos)
+        self._refresh_total_summary()
         

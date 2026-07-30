@@ -16,6 +16,7 @@ from core.app_settings import load_settings
 from data.database import Database
 from ui.app import App
 from core.updater import notify_post_update_status, schedule_auto_update_check
+from ui.tutorial import TutorialController
 
 
 def resolve_db_path() -> str:
@@ -46,9 +47,14 @@ def main() -> None:
 
     # Start Tkinter app
     app = App(db, settings)
+    app.tutorial_controller = TutorialController(app, settings)
     app.after(500, lambda: notify_post_update_status(app))
     if settings.auto_update_check:
         schedule_auto_update_check(app)
+    # Fire tutorial startup checks more than once to survive heavy startup UI work.
+    app.after_idle(app.tutorial_controller.start_if_needed)
+    app.after(900, app.tutorial_controller.start_if_needed)
+    app.after(1800, app.tutorial_controller.start_if_needed)
     app.mainloop()
 
 

@@ -50,6 +50,11 @@ from ui.savings import SavingsPage
 from ui.settings import SettingsPage
 
 
+class _TutorialControllerProtocol:
+    def start_if_needed(self) -> None:
+        raise NotImplementedError
+
+
 class App(tk.Tk):
     """
     Root Tkinter application window.
@@ -79,6 +84,7 @@ class App(tk.Tk):
         self.budget_repo = BudgetRepository(db)
         self.savings_service = SavingsService(self.tx_repo)
         self.settings = settings
+        self.tutorial_controller: _TutorialControllerProtocol | None = None
 
         # --- UI Containers ----------------------------------------------------
         self.sidebar: tk.Frame

@@ -76,23 +76,24 @@ class DashboardPage(ScrollablePage):
         # --- Row 1: Income / Expenses / Week ---
         row1 = tk.Frame(container, bg=BG)
         row1.pack(fill="x", pady=(0, 16))
+        self.summary_row_1 = row1
 
         for i in range(3):
             row1.columnconfigure(i, weight=1, uniform="stat")
 
-        StatCard(row1, "Monthly Income", self.var_income, SUCCESS).grid(
-            row=0, column=0, padx=5, sticky="nsew"
-        )
-        StatCard(row1, "Monthly Expenses", self.var_expenses, DANGER).grid(
-            row=0, column=1, padx=5, sticky="nsew"
-        )
-        StatCard(row1, "This Week Spent", self.var_week, WARNING).grid(
-            row=0, column=2, padx=5, sticky="nsew"
-        )
+        self.card_income = StatCard(row1, "Monthly Income", self.var_income, SUCCESS)
+        self.card_income.grid(row=0, column=0, padx=5, sticky="nsew")
+
+        self.card_expenses = StatCard(row1, "Monthly Expenses", self.var_expenses, DANGER)
+        self.card_expenses.grid(row=0, column=1, padx=5, sticky="nsew")
+
+        self.card_week = StatCard(row1, "This Week Spent", self.var_week, WARNING)
+        self.card_week.grid(row=0, column=2, padx=5, sticky="nsew")
 
         # --- Row 2: Debt / Running Total / Savings ---
         row2 = tk.Frame(container, bg=BG)
         row2.pack(fill="x", pady=(0, 16))
+        self.summary_row_2 = row2
 
         for i in range(3):
             row2.columnconfigure(i, weight=1, uniform="stat2")

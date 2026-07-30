@@ -959,19 +959,14 @@ class BudgetAdvisorService:
         )
 
         total_spend = sum(category_budgets.values())
-        leftover = max(income - total_spend, 0.0)
-
-        # Split leftover between savings and debt
-        savings_extra = leftover * 0.5
-        debt_extra = leftover * 0.5
 
         savings_name = self._savings_category_name()
-        savings_target = category_budgets.get(savings_name, 0.0) + savings_extra if savings_name else savings_extra
+        savings_target = category_budgets.get(savings_name, 0.0) if savings_name else 0.0
 
         # Apply carry-over behavior (push extra to savings + flexible)
         savings_target = self._apply_carryover(income, category_budgets, savings_target)
 
-        debt_target = self._debt_budget_total(category_budgets) + debt_extra
+        debt_target = self._debt_budget_total(category_budgets)
 
         forecast = self._forecast_savings(
             monthly_savings=savings_target,
@@ -1024,18 +1019,14 @@ class BudgetAdvisorService:
         )
 
         total_spend = sum(category_budgets.values())
-        leftover = max(income - total_spend, 0.0)
-
-        savings_extra = leftover * 0.7
-        debt_extra = leftover * 0.3
 
         savings_name = self._savings_category_name()
-        savings_target = category_budgets.get(savings_name, 0.0) + savings_extra if savings_name else savings_extra
+        savings_target = category_budgets.get(savings_name, 0.0) if savings_name else 0.0
 
         # Apply carry-over behavior
         savings_target = self._apply_carryover(income, category_budgets, savings_target)
 
-        debt_target = self._debt_budget_total(category_budgets) + debt_extra
+        debt_target = self._debt_budget_total(category_budgets)
 
         forecast = self._forecast_savings(
             monthly_savings=savings_target,
@@ -1083,19 +1074,14 @@ class BudgetAdvisorService:
         )
 
         total_spend = sum(category_budgets.values())
-        leftover = max(income - total_spend, 0.0)
-
-        # In debt mode, leftover goes mostly to debt
-        savings_extra = leftover * 0.2
-        debt_extra = leftover * 0.8
 
         savings_name = self._savings_category_name()
-        savings_target = category_budgets.get(savings_name, 0.0) + savings_extra if savings_name else savings_extra
+        savings_target = category_budgets.get(savings_name, 0.0) if savings_name else 0.0
 
         # Carry-over still pushes some extra into savings + flexible
         savings_target = self._apply_carryover(income, category_budgets, savings_target)
 
-        debt_target = self._debt_budget_total(category_budgets) + debt_extra
+        debt_target = self._debt_budget_total(category_budgets)
 
         insights: List[str] = []
         insights.append(

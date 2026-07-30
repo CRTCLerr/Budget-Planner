@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import tkinter as tk
+from tkinter import messagebox
 from typing import TYPE_CHECKING
 
 from core.app_settings import save_settings
@@ -45,6 +46,7 @@ class SettingsPage(ScrollablePage):
             pady=16,
         )
         card.pack(fill="x")
+        self.update_card = card
 
         tk.Label(
             card,
@@ -95,7 +97,7 @@ class SettingsPage(ScrollablePage):
             selectcolor=CARD_BG,
         ).pack(anchor="w", pady=(0, 14))
 
-        tk.Button(
+        self.btn_check_updates = tk.Button(
             card,
             text="Check for Updates Now",
             font=(FONT, 10, "bold"),
@@ -108,9 +110,114 @@ class SettingsPage(ScrollablePage):
             pady=8,
             cursor="hand2",
             command=lambda: check_for_updates(self.app, prompt_if_latest=True),
-        ).pack(anchor="w")
+        )
+        self.btn_check_updates.pack(anchor="w")
+
+        tutorial_card = tk.Frame(
+            container,
+            bg=CARD_BG,
+            highlightbackground=BORDER,
+            highlightthickness=1,
+            padx=20,
+            pady=16,
+        )
+        tutorial_card.pack(fill="x", pady=(16, 0))
+        self.tutorial_card = tutorial_card
+
+        tk.Label(
+            tutorial_card,
+            text="Tutorial",
+            font=(FONT, 14, "bold"),
+            fg=TEXT,
+            bg=CARD_BG,
+        ).pack(anchor="w", pady=(0, 8))
+
+        tk.Label(
+            tutorial_card,
+            text=(
+                "Use the guided tutorial to learn each screen step by step. "
+                "It can start automatically once, and you can replay it any time."
+            ),
+            font=(FONT, 10),
+            fg=TEXT_SEC,
+            bg=CARD_BG,
+            justify="left",
+            wraplength=700,
+        ).pack(anchor="w", pady=(0, 12))
+
+        self.var_tutorial_auto_start = tk.BooleanVar(value=bool(self.app.settings.tutorial_auto_start))
+
+        self.chk_tutorial_auto_start = tk.Checkbutton(
+            tutorial_card,
+            text="Show tutorial on startup",
+            variable=self.var_tutorial_auto_start,
+            onvalue=True,
+            offvalue=False,
+            command=self._save_tutorial_setting,
+            font=(FONT, 10),
+            fg=TEXT,
+            bg=CARD_BG,
+            activebackground=CARD_BG,
+            selectcolor=CARD_BG,
+        )
+        self.chk_tutorial_auto_start.pack(anchor="w", pady=(0, 12))
+
+        btn_row = tk.Frame(tutorial_card, bg=CARD_BG)
+        btn_row.pack(anchor="w")
+
+        self.btn_start_tutorial = tk.Button(
+            btn_row,
+            text="Start Tutorial",
+            font=(FONT, 10, "bold"),
+            bg="#0f766e",
+            fg="#ffffff",
+            activebackground="#115e59",
+            activeforeground="#ffffff",
+            bd=0,
+            padx=14,
+            pady=8,
+            cursor="hand2",
+            command=self._start_tutorial,
+        )
+        self.btn_start_tutorial.pack(side="left")
+
+        self.btn_reset_tutorial = tk.Button(
+            btn_row,
+            text="Reset Tutorial Completion",
+            font=(FONT, 10, "bold"),
+            bg="#e5e7eb",
+            fg="#111827",
+            activebackground="#d1d5db",
+            activeforeground="#111827",
+            bd=0,
+            padx=14,
+            pady=8,
+            cursor="hand2",
+            command=self._reset_tutorial_completion,
+        )
+        self.btn_reset_tutorial.pack(side="left", padx=(10, 0))
 
     def _save_auto_update_setting(self) -> None:
         self.app.settings.auto_update_check = bool(self.var_auto_update.get())
         self.app.settings.auto_update_install = bool(self.var_auto_install.get())
+        save_settings(self.app.settings)
+
+    def _save_tutorial_setting(self) -> None:
+        self.app.settings.tutorial_auto_start = bool(self.var_tutorial_auto_start.get())
+        save_settings(self.app.settings)
+
+    def _start_tutorial(self) -> None:
+        controller = getattr(self.app, "tutorial_controller", None)
+        if controller is not None:
+            controller.restart()
+            return
+
+        messagebox.showerror(
+            "Tutorial Unavailable",
+            "The tutorial controller was not initialized. Restart the app and try again.",
+        )
+
+    def _reset_tutorial_completion(self) -> None:
+        self.app.settings.tutorial_completed = False
+        self.app.settings.tutorial_last_step = 0
         save_settings(self.app.settings)

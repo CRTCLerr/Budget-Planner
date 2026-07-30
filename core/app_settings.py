@@ -12,6 +12,9 @@ from pathlib import Path
 class AppSettings:
     auto_update_check: bool = True
     auto_update_install: bool = True
+    tutorial_auto_start: bool = True
+    tutorial_completed: bool = False
+    tutorial_last_step: int = 0
 
 
 def _settings_path() -> Path:
@@ -33,6 +36,9 @@ def load_settings() -> AppSettings:
     return AppSettings(
         auto_update_check=bool(payload.get("auto_update_check", True)),
         auto_update_install=bool(payload.get("auto_update_install", True)),
+        tutorial_auto_start=bool(payload.get("tutorial_auto_start", True)),
+        tutorial_completed=bool(payload.get("tutorial_completed", False)),
+        tutorial_last_step=int(payload.get("tutorial_last_step", 0) or 0),
     )
 
 
@@ -41,5 +47,8 @@ def save_settings(settings: AppSettings) -> None:
     payload = {
         "auto_update_check": bool(settings.auto_update_check),
         "auto_update_install": bool(settings.auto_update_install),
+        "tutorial_auto_start": bool(settings.tutorial_auto_start),
+        "tutorial_completed": bool(settings.tutorial_completed),
+        "tutorial_last_step": int(settings.tutorial_last_step),
     }
     path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
