@@ -46,10 +46,17 @@ Current behavior:
 
 Users should download the app from GitHub Releases, not from source ZIPs.
 
-- Windows asset: `Budget-Planner-windows-x86_64.exe`
+- Windows installer asset: `Budget-Planner-Setup-windows-x86_64.exe`
+- Windows portable asset: `Budget-Planner-windows-x86_64.exe`
 - Linux asset: `Budget-Planner-linux-x86_64`
 
 Each release should include both assets so the in-app updater can select the correct platform package.
+
+Recommended user flow:
+
+- New Windows users: use the installer (`Budget-Planner-Setup-windows-x86_64.exe`).
+- Existing portable Windows users: keep using the portable `.exe` update track.
+- Linux users: use the Linux binary asset.
 
 ## Automated Windows + Linux Release Builds
 
@@ -57,12 +64,24 @@ This repository now includes a GitHub Actions workflow:
 
 - Workflow file: `.github/workflows/release-build.yml`
 - Trigger: push a version tag like `v0.1.1`
-- Output: one-file Windows and Linux binaries uploaded to the GitHub Release
+- Output:
+	- Windows portable one-file binary
+	- Windows installer with Program Files default and install-folder picker
+	- Linux one-file binary
+	- All published directly to the GitHub Release
 
 Important:
 
 - PyInstaller does not reliably cross-compile Windows and Linux binaries from one machine.
 - The workflow builds each platform on its native runner (`windows-latest`, `ubuntu-latest`) and then publishes both assets to one release.
+
+## Update Compatibility Notes
+
+The updater supports both modern one-file and legacy one-dir style release assets.
+
+- Portable `.exe` releases can replace the running app binary in place.
+- Installer-style releases (`.msi` or setup `.exe`) are used for Program Files installations.
+- `.zip` assets are supported as a fallback path for legacy one-dir update flows.
 
 ## Core Screens
 

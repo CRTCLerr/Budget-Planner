@@ -41,16 +41,61 @@ def _is_newer(remote_tag: str, local_version: str) -> bool:
     return remote > local
 
 
-def _pick_windows_asset(assets: list[dict]) -> dict | None:
+def _is_windows_program_files_install(exe_path: Path) -> bool:
+    if not sys.platform.startswith("win"):
+        return False
+
+    try:
+        resolved = exe_path.resolve()
+    except OSError:
+        resolved = exe_path
+
+    program_files_roots = [
+        os.environ.get("ProgramFiles", ""),
+        os.environ.get("ProgramFiles(x86)", ""),
+    ]
+
+    lowered = str(resolved).lower()
+    for root in program_files_roots:
+        root = root.strip()
+        if root and lowered.startswith(str(Path(root)).lower()):
+            return True
+    return False
+
+
+def _pick_windows_asset(assets: list[dict], prefer_installer: bool = False) -> dict | None:
+    if prefer_installer:
+        for asset in assets:
+            name = str(asset.get("name", "")).lower()
+            if name.endswith(".msi"):
+                return asset
+
+        for asset in assets:
+            name = str(asset.get("name", "")).lower()
+            if name.endswith(".exe") and (
+                "setup" in name or "installer" in name or "install" in name
+            ):
+                return asset
+
     for asset in assets:
         name = str(asset.get("name", "")).lower()
-        if name.endswith(".exe"):
+        if name.endswith(".exe") and not (
+            "setup" in name or "installer" in name or "install" in name
+        ):
             return asset
 
     for asset in assets:
         name = str(asset.get("name", "")).lower()
         if name.endswith(".msi"):
             return asset
+
+    if not prefer_installer:
+        for asset in assets:
+            name = str(asset.get("name", "")).lower()
+            if name.endswith(".exe") and (
+                "setup" in name or "installer" in name or "install" in name
+            ):
+                return asset
 
     for asset in assets:
         name = str(asset.get("name", "")).lower()
@@ -102,7 +147,9 @@ def _current_platform() -> str:
 def _pick_release_asset_for_current_platform(assets: list[dict]) -> dict | None:
     current = _current_platform()
     if current == "windows":
-        return _pick_windows_asset(assets)
+        exe_path = Path(sys.executable).resolve() if getattr(sys, "frozen", False) else Path(".")
+        prefer_installer = _is_windows_program_files_install(exe_path)
+        return _pick_windows_asset(assets, prefer_installer=prefer_installer)
     if current == "linux":
         return _pick_linux_asset(assets)
     return None
@@ -203,6 +250,7 @@ def _build_powershell_updater_script(script_path: Path) -> None:
 )
 
 $ErrorActionPreference = "SilentlyContinue"
+$launchedInstaller = $false
 
 if ($AppPid -gt 0) {
     Wait-Process -Id $AppPid
@@ -246,6 +294,7 @@ elseif ($ext -eq ".exe") {
     }
 
     if (-not $copied) {
+        $launchedInstaller = $true
         $p = Start-Process -FilePath $AssetPath -PassThru
         if ($p) {
             Wait-Process -Id $p.Id
@@ -253,7 +302,11 @@ elseif ($ext -eq ".exe") {
     }
 }
 
-Start-Process -FilePath $ExePath
+if (-not $launchedInstaller) {
+    if (Test-Path $ExePath) {
+        Start-Process -FilePath $ExePath
+    }
+}
 '''
     script_path.write_text(script, encoding="utf-8")
 
