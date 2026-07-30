@@ -37,6 +37,33 @@ The project includes PyInstaller support for Windows packaging.
 
 If you already use PyInstaller in your environment, build with the spec file from the project root.
 
+Current behavior:
+
+- Local build output is a single executable file (one-file mode) in `dist/`.
+- Windows local build output is `dist/Budget Planner.exe`.
+
+## Releases and Downloads
+
+Users should download the app from GitHub Releases, not from source ZIPs.
+
+- Windows asset: `Budget-Planner-windows-x86_64.exe`
+- Linux asset: `Budget-Planner-linux-x86_64`
+
+Each release should include both assets so the in-app updater can select the correct platform package.
+
+## Automated Windows + Linux Release Builds
+
+This repository now includes a GitHub Actions workflow:
+
+- Workflow file: `.github/workflows/release-build.yml`
+- Trigger: push a version tag like `v0.1.1`
+- Output: one-file Windows and Linux binaries uploaded to the GitHub Release
+
+Important:
+
+- PyInstaller does not reliably cross-compile Windows and Linux binaries from one machine.
+- The workflow builds each platform on its native runner (`windows-latest`, `ubuntu-latest`) and then publishes both assets to one release.
+
 ## Core Screens
 
 ### Dashboard

@@ -44,14 +44,67 @@ def _is_newer(remote_tag: str, local_version: str) -> bool:
 def _pick_windows_asset(assets: list[dict]) -> dict | None:
     for asset in assets:
         name = str(asset.get("name", "")).lower()
-        if name.endswith(".zip"):
+        if name.endswith(".exe"):
             return asset
 
     for asset in assets:
         name = str(asset.get("name", "")).lower()
-        if name.endswith(".exe") or name.endswith(".msi"):
+        if name.endswith(".msi"):
             return asset
 
+    for asset in assets:
+        name = str(asset.get("name", "")).lower()
+        if name.endswith(".zip"):
+            return asset
+
+    return None
+
+
+def _pick_linux_asset(assets: list[dict]) -> dict | None:
+    tagged = []
+    generic = []
+
+    for asset in assets:
+        name = str(asset.get("name", "")).lower()
+        if not name:
+            continue
+
+        if "linux" in name and (
+            name.endswith(".appimage")
+            or name.endswith(".tar.gz")
+            or name.endswith(".bin")
+            or "." not in Path(name).name
+        ):
+            tagged.append(asset)
+        elif (
+            name.endswith(".appimage")
+            or name.endswith(".tar.gz")
+            or name.endswith(".bin")
+            or "." not in Path(name).name
+        ):
+            generic.append(asset)
+
+    if tagged:
+        return tagged[0]
+    if generic:
+        return generic[0]
+    return None
+
+
+def _current_platform() -> str:
+    if sys.platform.startswith("win"):
+        return "windows"
+    if sys.platform.startswith("linux"):
+        return "linux"
+    return "other"
+
+
+def _pick_release_asset_for_current_platform(assets: list[dict]) -> dict | None:
+    current = _current_platform()
+    if current == "windows":
+        return _pick_windows_asset(assets)
+    if current == "linux":
+        return _pick_linux_asset(assets)
     return None
 
 
@@ -189,6 +242,51 @@ Start-Process -FilePath $ExePath
     script_path.write_text(script, encoding="utf-8")
 
 
+def _build_linux_updater_script(script_path: Path) -> None:
+        script = r'''#!/usr/bin/env bash
+set -eu
+
+APP_PID="$1"
+ASSET_PATH="$2"
+EXE_PATH="$3"
+
+if [ "${APP_PID}" -gt 0 ] 2>/dev/null; then
+    while kill -0 "${APP_PID}" 2>/dev/null; do
+        sleep 1
+    done
+fi
+
+LOWER_ASSET="$(printf '%s' "${ASSET_PATH}" | tr '[:upper:]' '[:lower:]')"
+STAGE_DIR=""
+SOURCE_BIN="${ASSET_PATH}"
+
+if [[ "${LOWER_ASSET}" == *.tar.gz ]]; then
+    STAGE_DIR="$(mktemp -d)"
+    tar -xzf "${ASSET_PATH}" -C "${STAGE_DIR}"
+
+    SOURCE_BIN="$(find "${STAGE_DIR}" -type f -perm -u+x | head -n 1)"
+    if [ -z "${SOURCE_BIN}" ]; then
+        SOURCE_BIN="$(find "${STAGE_DIR}" -type f | head -n 1)"
+    fi
+fi
+
+if [ -z "${SOURCE_BIN}" ] || [ ! -f "${SOURCE_BIN}" ]; then
+    exit 1
+fi
+
+cp -f "${SOURCE_BIN}" "${EXE_PATH}.new"
+chmod +x "${EXE_PATH}.new"
+mv -f "${EXE_PATH}.new" "${EXE_PATH}"
+
+if [ -n "${STAGE_DIR}" ] && [ -d "${STAGE_DIR}" ]; then
+    rm -rf "${STAGE_DIR}"
+fi
+
+nohup "${EXE_PATH}" >/dev/null 2>&1 &
+'''
+        script_path.write_text(script, encoding="utf-8")
+
+
 def _launch_external_apply_and_restart(root, downloaded_asset: Path, target_tag: str) -> None:
     if not getattr(root, "tk", None):
         return
@@ -207,36 +305,61 @@ def _launch_external_apply_and_restart(root, downloaded_asset: Path, target_tag:
     exe_path = Path(sys.executable).resolve()
     install_dir = exe_path.parent
 
-    script_path = _settings_base() / "apply_update.ps1"
-    _build_powershell_updater_script(script_path)
     _save_pending_update(target_tag)
 
-    creation_flags = 0
-    if hasattr(subprocess, "DETACHED_PROCESS"):
-        creation_flags |= subprocess.DETACHED_PROCESS
-    if hasattr(subprocess, "CREATE_NEW_PROCESS_GROUP"):
-        creation_flags |= subprocess.CREATE_NEW_PROCESS_GROUP
+    if sys.platform.startswith("win"):
+        script_path = _settings_base() / "apply_update.ps1"
+        _build_powershell_updater_script(script_path)
 
-    subprocess.Popen(
-        [
-            "powershell",
-            "-NoProfile",
-            "-ExecutionPolicy",
-            "Bypass",
-            "-File",
-            str(script_path),
-            "-AppPid",
-            str(os.getpid()),
-            "-AssetPath",
-            str(downloaded_asset),
-            "-InstallDir",
-            str(install_dir),
-            "-ExePath",
-            str(exe_path),
-        ],
-        creationflags=creation_flags,
-        close_fds=True,
-    )
+        creation_flags = 0
+        if hasattr(subprocess, "DETACHED_PROCESS"):
+            creation_flags |= subprocess.DETACHED_PROCESS
+        if hasattr(subprocess, "CREATE_NEW_PROCESS_GROUP"):
+            creation_flags |= subprocess.CREATE_NEW_PROCESS_GROUP
+
+        subprocess.Popen(
+            [
+                "powershell",
+                "-NoProfile",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                str(script_path),
+                "-AppPid",
+                str(os.getpid()),
+                "-AssetPath",
+                str(downloaded_asset),
+                "-InstallDir",
+                str(install_dir),
+                "-ExePath",
+                str(exe_path),
+            ],
+            creationflags=creation_flags,
+            close_fds=True,
+        )
+    elif sys.platform.startswith("linux"):
+        script_path = _settings_base() / "apply_update.sh"
+        _build_linux_updater_script(script_path)
+        script_path.chmod(0o755)
+
+        subprocess.Popen(
+            [
+                "/bin/bash",
+                str(script_path),
+                str(os.getpid()),
+                str(downloaded_asset),
+                str(exe_path),
+            ],
+            start_new_session=True,
+            close_fds=True,
+        )
+    else:
+        messagebox.showinfo(
+            "Update Downloaded",
+            f"Update package downloaded to:\n{downloaded_asset}",
+            parent=root,
+        )
+        return
 
     messagebox.showinfo(
         "Updating",
@@ -297,11 +420,19 @@ def _prompt_update_flow(root, release: dict, prompt_if_latest: bool) -> None:
     if not wants_update:
         return
 
-    chosen = _pick_windows_asset(assets)
+    chosen = _pick_release_asset_for_current_platform(assets)
     if chosen is None:
+        platform_name = _current_platform()
+        if platform_name == "windows":
+            expected = ".exe, .msi, .zip"
+        elif platform_name == "linux":
+            expected = "linux one-file asset (.AppImage, .bin, or executable)"
+        else:
+            expected = "an asset for the current platform"
+
         messagebox.showerror(
             "Update Unavailable",
-            "No supported Windows asset (.zip, .exe, .msi) was found in this release.",
+            f"No supported {platform_name} asset ({expected}) was found in this release.",
             parent=root,
         )
         return
