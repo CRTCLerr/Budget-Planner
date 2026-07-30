@@ -231,9 +231,25 @@ elseif ($ext -eq ".msi") {
     }
 }
 elseif ($ext -eq ".exe") {
-    $p = Start-Process -FilePath $AssetPath -PassThru
-    if ($p) {
-        Wait-Process -Id $p.Id
+    # For portable one-file releases, replace the running executable directly.
+    # If replacement fails (for example due to permissions), treat the asset as
+    # an installer and run it interactively.
+    $copied = $false
+    try {
+        $tempNew = "$ExePath.new"
+        Copy-Item -Path $AssetPath -Destination $tempNew -Force
+        Move-Item -Path $tempNew -Destination $ExePath -Force
+        $copied = $true
+    }
+    catch {
+        $copied = $false
+    }
+
+    if (-not $copied) {
+        $p = Start-Process -FilePath $AssetPath -PassThru
+        if ($p) {
+            Wait-Process -Id $p.Id
+        }
     }
 }
 
