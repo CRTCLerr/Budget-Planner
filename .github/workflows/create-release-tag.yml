@@ -1,0 +1,60 @@
+name: Create Release Tag
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - core/app_version.py
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  tag_release:
+    name: Create Release Tag
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Read app version
+        id: version
+        shell: bash
+        run: |
+          VERSION=$(python - <<'PY'
+from pathlib import Path
+import re
+text = Path('core/app_version.py').read_text(encoding='utf-8')
+match = re.search(r'APP_VERSION\s*=\s*["\']([^"\']+)["\']', text)
+if not match:
+    raise SystemExit('APP_VERSION not found')
+print(match.group(1))
+PY
+)
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Check whether tag already exists
+        id: tag_exists
+        shell: bash
+        run: |
+          TAG="v${{ steps.version.outputs.version }}"
+          if git ls-remote --tags origin "refs/tags/$TAG" | grep -q "$TAG"; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create and push tag
+        if: steps.tag_exists.outputs.exists == 'false'
+        shell: bash
+        run: |
+          TAG="v${{ steps.version.outputs.version }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -a "$TAG" -m "Release $TAG"
+          git push origin "$TAG"
