@@ -66,7 +66,35 @@ jobs:
           if ([string]::IsNullOrWhiteSpace($version)) {
             throw "APP_VERSION is empty or unreadable from core/app_version.py"
           }
-          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "tools\installer.iss" "/DAppVersion=$version"
+          if (!(Test-Path "dist/BudgetPlanner/BudgetPlanner.exe")) {
+            throw "Expected dist/BudgetPlanner/BudgetPlanner.exe before installer build."
+          }
+
+          # Resolve ISCC dynamically because install location can vary on hosted runners.
+          $iscc = (Get-Command ISCC.exe -ErrorAction SilentlyContinue).Source
+          if (-not $iscc) {
+            $candidatePaths = @(
+              "C:\Program Files (x86)\Inno Setup 6\ISCC.exe",
+              "C:\Program Files\Inno Setup 6\ISCC.exe",
+              "C:\ProgramData\chocolatey\bin\iscc.exe"
+            )
+            foreach ($candidate in $candidatePaths) {
+              if (Test-Path $candidate) {
+                $iscc = $candidate
+                break
+              }
+            }
+          }
+
+          if (-not $iscc) {
+            throw "ISCC.exe was not found after installing Inno Setup."
+          }
+
+          Write-Host "Using ISCC at: $iscc"
+          Write-Host "Contents of dist/BudgetPlanner:"
+          Get-ChildItem -Path "dist/BudgetPlanner" -Recurse | Select-Object FullName,Length
+
+          & $iscc "tools\installer.iss" "/DAppVersion=$version"
 
       - name: Create Windows zip package
         if: runner.os == 'Windows'
