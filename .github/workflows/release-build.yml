@@ -2,8 +2,11 @@ name: Build and Publish Release Assets
 
 on:
   push:
-    tags:
-      - "v*"
+    branches:
+      - main
+    paths:
+      - core/app_version.py
+      - .github/workflows/release-build.yml
   workflow_dispatch:
 
 permissions:

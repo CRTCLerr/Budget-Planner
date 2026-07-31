@@ -75,7 +75,7 @@ That means the normal release flow is:
 1. Test and merge the release commit to `main`.
 2. Update `core/app_version.py` to the version you want to ship.
 3. Push the version bump.
-4. GitHub Actions creates the matching tag, and the tag-triggered release workflow publishes the release assets automatically.
+4. GitHub Actions builds the binaries, creates the matching tag when needed, and publishes the release assets automatically.
 
 Important:
 
