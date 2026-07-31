@@ -48,57 +48,13 @@ jobs:
       - name: Build executable
         run: python tools/pyinstaller.py
 
-      - name: Verify Windows build inputs
+      - name: Verify Windows build output
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
           Get-ChildItem -Path dist -Force | Format-Table Name,Length
           if (!(Test-Path "dist/BudgetPlanner.exe")) {
             throw "Expected dist/BudgetPlanner.exe was not produced by PyInstaller."
-          }
-          if (!(Test-Path "tools/installer.iss")) {
-            throw "Installer script tools/installer.iss is missing."
-          }
-
-      - name: Install Inno Setup
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          choco install innosetup -y --no-progress
-
-      - name: Build installer
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = "Stop"
-          $version = python -c "from pathlib import Path; import re; text = Path('core/app_version.py').read_text(encoding='utf-8'); m = re.search(r'APP_VERSION\\s*=\\s*[\"\']([^\"\']+)[\"\']', text); print(m.group(1) if m else '')"
-          if ([string]::IsNullOrWhiteSpace($version)) {
-            throw "APP_VERSION is empty or unreadable from core/app_version.py"
-          }
-
-          $iscc = (Get-Command iscc -ErrorAction SilentlyContinue)?.Source
-          if (-not $iscc) {
-            $fallback = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
-            if (Test-Path $fallback) {
-              $iscc = $fallback
-            }
-          }
-          if (-not $iscc) {
-            throw "Inno Setup compiler (ISCC.exe) was not found after install step."
-          }
-
-          Write-Host "Using ISCC: $iscc"
-          Write-Host "Installer version: $version"
-          try {
-            & $iscc "tools\installer.iss" "/DAppVersion=$version"
-            if ($LASTEXITCODE -ne 0) {
-              throw "ISCC failed with exit code $LASTEXITCODE"
-            }
-            Write-Host "Installer build succeeded."
-          }
-          catch {
-            Write-Warning "Installer build failed: $($_.Exception.Message)"
-            Write-Warning "Continuing release with portable binaries."
           }
 
       - name: Copy portable executable
@@ -122,15 +78,6 @@ jobs:
           path: |
             dist/${{ matrix.portable_name }}
           if-no-files-found: error
-
-      - name: Upload Windows installer artifact (optional)
-        if: runner.os == 'Windows'
-        uses: actions/upload-artifact@v4
-        with:
-          name: windows-installer-asset
-          path: |
-            dist/BudgetPlanner-Setup-windows-x86_64.exe
-          if-no-files-found: ignore
 
       - name: Upload Linux build artifacts
         if: runner.os == 'Linux'
@@ -192,12 +139,3 @@ jobs:
           overwrite_files: true
           fail_on_unmatched_files: true
 
-      - name: Publish installer asset when available
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ steps.version.outputs.tag }}
-          name: ${{ steps.version.outputs.tag }}
-          files: |
-            release_assets/BudgetPlanner-Setup-windows-x86_64.exe
-          overwrite_files: true
-          fail_on_unmatched_files: false
