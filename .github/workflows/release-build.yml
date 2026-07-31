@@ -63,20 +63,20 @@ jobs:
         run: |
           choco install innosetup -y --no-progress
           $version = @'
-from pathlib import Path
-import re
+          from pathlib import Path
+          import re
 
-text = Path("core/app_version.py").read_text(encoding="utf-8")
-match = re.search(r"APP_VERSION\s*=\s*['\"]([^'\"]+)['\"]", text)
-print(match.group(1) if match else "")
-'@ | python -
-          $version = $version.Trim()
-          if ([string]::IsNullOrWhiteSpace($version)) {
-            throw "APP_VERSION is empty or unreadable from core/app_version.py"
-          }
-          if (!(Test-Path "dist/BudgetPlanner/BudgetPlanner.exe")) {
-            throw "Expected dist/BudgetPlanner/BudgetPlanner.exe before installer build."
-          }
+          text = Path("core/app_version.py").read_text(encoding="utf-8")
+          match = re.search(r"APP_VERSION\s*=\s*['\"]([^'\"]+)['\"]", text)
+          print(match.group(1) if match else "")
+          '@ | python -
+                    $version = $version.Trim()
+                    if ([string]::IsNullOrWhiteSpace($version)) {
+                      throw "APP_VERSION is empty or unreadable from core/app_version.py"
+                    }
+                    if (!(Test-Path "dist/BudgetPlanner/BudgetPlanner.exe")) {
+                      throw "Expected dist/BudgetPlanner/BudgetPlanner.exe before installer build."
+                    }
 
           # Resolve ISCC dynamically because install location can vary on hosted runners.
           $iscc = (Get-Command ISCC.exe -ErrorAction SilentlyContinue).Source
