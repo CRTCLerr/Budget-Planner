@@ -48,6 +48,18 @@ jobs:
       - name: Build executable
         run: python tools/pyinstaller.py
 
+      - name: Verify Windows build inputs
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Get-ChildItem -Path dist -Force | Format-Table Name,Length
+          if (!(Test-Path "dist/BudgetPlanner.exe")) {
+            throw "Expected dist/BudgetPlanner.exe was not produced by PyInstaller."
+          }
+          if (!(Test-Path "tools/installer.iss")) {
+            throw "Installer script tools/installer.iss is missing."
+          }
+
       - name: Install Inno Setup
         if: runner.os == 'Windows'
         shell: pwsh
@@ -58,8 +70,29 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
+          $ErrorActionPreference = "Stop"
           $version = python -c "from pathlib import Path; import re; text = Path('core/app_version.py').read_text(encoding='utf-8'); m = re.search(r'APP_VERSION\\s*=\\s*[\"\']([^\"\']+)[\"\']', text); print(m.group(1) if m else '')"
-          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "tools\installer.iss" "/DAppVersion=$version"
+          if ([string]::IsNullOrWhiteSpace($version)) {
+            throw "APP_VERSION is empty or unreadable from core/app_version.py"
+          }
+
+          $iscc = (Get-Command iscc -ErrorAction SilentlyContinue)?.Source
+          if (-not $iscc) {
+            $fallback = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+            if (Test-Path $fallback) {
+              $iscc = $fallback
+            }
+          }
+          if (-not $iscc) {
+            throw "Inno Setup compiler (ISCC.exe) was not found after install step."
+          }
+
+          Write-Host "Using ISCC: $iscc"
+          Write-Host "Installer version: $version"
+          & $iscc "tools\installer.iss" "/DAppVersion=$version"
+          if ($LASTEXITCODE -ne 0) {
+            throw "ISCC failed with exit code $LASTEXITCODE"
+          }
 
       - name: Copy portable executable
         if: runner.os == 'Windows'
