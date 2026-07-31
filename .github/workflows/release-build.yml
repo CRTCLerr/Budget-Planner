@@ -104,16 +104,11 @@ jobs:
         id: version
         shell: bash
         run: |
-          VERSION=$(python - <<'PY'
-from pathlib import Path
-import re
-text = Path('core/app_version.py').read_text(encoding='utf-8')
-match = re.search(r'APP_VERSION\s*=\s*["\']([^"\']+)["\']', text)
-if not match:
-    raise SystemExit('APP_VERSION not found')
-print(match.group(1))
-PY
-)
+          VERSION=$(python -c "from pathlib import Path; import re; text = Path('core/app_version.py').read_text(encoding='utf-8'); m = re.search(r'APP_VERSION\\s*=\\s*[\"\']([^\"\']+)[\"\']', text); print(m.group(1) if m else '')")
+          if [ -z "$VERSION" ]; then
+            echo "APP_VERSION not found in core/app_version.py" >&2
+            exit 1
+          fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
 
