@@ -9,9 +9,20 @@ permissions:
   contents: write
 
 jobs:
-  windows-release:
-    name: Windows Release Assets
-    runs-on: windows-latest
+  build:
+    name: Build (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            artifact_name: windows-release-assets
+            portable_name: Budget-Planner-windows-x86_64.exe
+          - os: ubuntu-latest
+            artifact_name: linux-release-assets
+            portable_name: Budget-Planner-linux-x86_64
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -25,68 +36,77 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install pyinstaller pillow matplotlib numpy
-          pip install pywin32
+
+      - name: Install Windows-only dependencies
+        if: runner.os == 'Windows'
+        run: pip install pywin32
 
       - name: Build executable
         run: python tools/pyinstaller.py
 
       - name: Rename portable executable
+        if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          Rename-Item -Path "dist/Budget Planner.exe" -NewName "Budget-Planner-windows-x86_64.exe"
+          Rename-Item -Path "dist/Budget Planner.exe" -NewName "${{ matrix.portable_name }}"
 
       - name: Install Inno Setup
+        if: runner.os == 'Windows'
         shell: pwsh
         run: |
           choco install innosetup -y --no-progress
 
       - name: Build installer
+        if: runner.os == 'Windows'
         shell: pwsh
         run: |
           $version = "${{ github.ref_name }}".TrimStart('v')
           & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "tools\installer.iss" "/DAppVersion=$version"
 
-      - name: Publish Windows assets to release
-        uses: softprops/action-gh-release@v2
-        with:
-          files: |
-            dist/Budget-Planner-windows-x86_64.exe
-            dist/Budget-Planner-Setup-windows-x86_64.exe
-          generate_release_notes: true
-          overwrite_files: true
-          fail_on_unmatched_files: true
+      - name: Rename Linux executable
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          mv "dist/Budget Planner" "dist/${{ matrix.portable_name }}"
+          chmod +x "dist/${{ matrix.portable_name }}"
 
-  linux-release:
-    name: Linux Release Asset
+      - name: Upload Windows build artifacts
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: |
+            dist/${{ matrix.portable_name }}
+            dist/Budget-Planner-Setup-windows-x86_64.exe
+          if-no-files-found: error
+
+      - name: Upload Linux build artifacts
+        if: runner.os == 'Linux'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: |
+            dist/${{ matrix.portable_name }}
+          if-no-files-found: error
+
+  publish:
+    name: Publish GitHub Release
+    needs: build
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
         with:
-          python-version: "3.13"
+          path: release_assets
+          merge-multiple: true
 
-      - name: Install dependencies
-        shell: bash
-        run: |
-          python -m pip install --upgrade pip
-          pip install pyinstaller pillow matplotlib numpy
-
-      - name: Build executable
-        run: python tools/pyinstaller.py
-
-      - name: Rename Linux executable
-        shell: bash
-        run: |
-          mv "dist/Budget Planner" "dist/Budget-Planner-linux-x86_64"
-          chmod +x "dist/Budget-Planner-linux-x86_64"
-
-      - name: Publish Linux asset to release
+      - name: Publish release assets
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            dist/Budget-Planner-linux-x86_64
+            release_assets/Budget-Planner-windows-x86_64.exe
+            release_assets/Budget-Planner-Setup-windows-x86_64.exe
+            release_assets/Budget-Planner-linux-x86_64
+          generate_release_notes: true
           overwrite_files: true
           fail_on_unmatched_files: true

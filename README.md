@@ -63,12 +63,25 @@ Recommended user flow:
 This repository now includes a GitHub Actions workflow:
 
 - Workflow file: `.github/workflows/release-build.yml`
-- Trigger: push a version tag like `v0.1.1`
+- Trigger: push a version tag like `v1.04.01`
 - Output:
 	- Windows portable one-file binary
 	- Windows installer with Program Files default and install-folder picker
 	- Linux one-file binary
 	- All published directly to the GitHub Release
+
+There is also an automation workflow that creates the release tag from the version file:
+
+- Workflow file: `.github/workflows/create-release-tag.yml`
+- Trigger: push a change to `core/app_version.py` on `main`
+- Behavior: reads `APP_VERSION`, creates `v<version>` if it does not already exist, and pushes that tag
+
+That means the normal release flow is:
+
+1. Test and merge the release commit to `main`.
+2. Update `core/app_version.py` to the version you want to ship.
+3. Push the version bump.
+4. GitHub Actions creates the tag and then the build workflow publishes the release assets automatically.
 
 Important:
 
