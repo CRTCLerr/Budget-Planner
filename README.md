@@ -63,7 +63,7 @@ Recommended user flow:
 This repository now includes a GitHub Actions workflow:
 
 - Workflow file: `.github/workflows/release-build.yml`
-- Trigger: push a version tag like `v1.04.01`
+- Trigger: push a version tag like `v1.04.02`
 - Output:
 	- Windows portable one-file binary
 	- Windows installer with Program Files default and install-folder picker
