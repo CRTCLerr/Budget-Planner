@@ -4,6 +4,7 @@ on:
   push:
     tags:
       - "v*"
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -44,12 +45,6 @@ jobs:
       - name: Build executable
         run: python tools/pyinstaller.py
 
-      - name: Rename portable executable
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          Rename-Item -Path "dist/Budget Planner.exe" -NewName "${{ matrix.portable_name }}"
-
       - name: Install Inno Setup
         if: runner.os == 'Windows'
         shell: pwsh
@@ -62,6 +57,12 @@ jobs:
         run: |
           $version = "${{ github.ref_name }}".TrimStart('v')
           & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "tools\installer.iss" "/DAppVersion=$version"
+
+      - name: Copy portable executable
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Copy-Item -Path "dist/Budget Planner.exe" -Destination "dist/${{ matrix.portable_name }}" -Force
 
       - name: Rename Linux executable
         if: runner.os == 'Linux'
