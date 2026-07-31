@@ -50,7 +50,7 @@ for folder in INCLUDE_FOLDERS:
 # -----------------------------
 cmd = [
     str(ENTRY_POINT),
-    "--onefile",
+    "--onedir",
     "--noconsole",
     "--clean",
     "--noconfirm",
@@ -96,5 +96,5 @@ print(cmd)
 PyInstaller.__main__.run(cmd)
 
 print("\n\nBuild complete!")
-exe_name = f"{APP_NAME}.exe" if sys.platform.startswith("win") else APP_NAME
-print(f"Your executable is located at: {PROJECT_ROOT / 'dist' / exe_name}")
+dist_dir = PROJECT_ROOT / "dist" / APP_NAME
+print(f"Your packaged app folder is located at: {dist_dir}")

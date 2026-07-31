@@ -35,20 +35,36 @@ def ensure_managed_runtime_location() -> bool:
         return True
 
     current_exe = Path(sys.executable).resolve()
+    current_dir = current_exe.parent
+    current_is_onedir = (current_dir / "_internal").exists()
     runtime_dir = Path(os.environ.get("LOCALAPPDATA", str(Path.home()))) / "BudgetPlanner" / "runtime"
     managed_exe = runtime_dir / "BudgetPlanner.exe"
+    managed_is_onedir = (runtime_dir / "_internal").exists()
 
     # Already running from managed location.
     if current_exe == managed_exe:
         return True
 
     try:
+        # If migrating from a historical onefile runtime to new onedir,
+        # reset the managed folder so dependency files are present.
+        if current_is_onedir and managed_exe.exists() and not managed_is_onedir:
+            shutil.rmtree(runtime_dir, ignore_errors=True)
+
         runtime_dir.mkdir(parents=True, exist_ok=True)
 
-        # Seed managed runtime only if missing; never overwrite to avoid
-        # downgrading when launched from an old legacy shortcut.
+        # Seed managed runtime only if missing; never overwrite managed runtime
+        # to avoid downgrading from a stale launch location.
         if not managed_exe.exists():
-            shutil.copy2(current_exe, managed_exe)
+            if current_is_onedir:
+                for item in current_dir.iterdir():
+                    target = runtime_dir / item.name
+                    if item.is_dir():
+                        shutil.copytree(item, target, dirs_exist_ok=True)
+                    else:
+                        shutil.copy2(item, target)
+            else:
+                shutil.copy2(current_exe, managed_exe)
 
         creation_flags = 0
         if hasattr(subprocess, "DETACHED_PROCESS"):

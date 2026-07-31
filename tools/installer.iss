@@ -28,7 +28,7 @@ SetupIconFile=..\assets\moneylogo.ico
 Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Files]
-Source: "..\dist\{#AppExeName}"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\dist\BudgetPlanner\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
 Name: "{autoprograms}\BudgetPlanner"; Filename: "{app}\{#AppExeName}"

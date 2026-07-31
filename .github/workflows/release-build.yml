@@ -22,7 +22,7 @@ jobs:
         include:
           - os: windows-latest
             artifact_name: windows-release-assets
-            portable_name: BudgetPlanner-windows-x86_64.exe
+            portable_name: BudgetPlanner-windows-x86_64.zip
           - os: ubuntu-latest
             artifact_name: linux-release-assets
             portable_name: BudgetPlanner-linux-x86_64
@@ -53,22 +53,37 @@ jobs:
         shell: pwsh
         run: |
           Get-ChildItem -Path dist -Force | Format-Table Name,Length
-          if (!(Test-Path "dist/BudgetPlanner.exe")) {
-            throw "Expected dist/BudgetPlanner.exe was not produced by PyInstaller."
+          if (!(Test-Path "dist/BudgetPlanner/BudgetPlanner.exe")) {
+            throw "Expected dist/BudgetPlanner/BudgetPlanner.exe was not produced by PyInstaller."
           }
 
-      - name: Copy portable executable
+      - name: Build installer (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          Copy-Item -Path "dist/BudgetPlanner.exe" -Destination "dist/${{ matrix.portable_name }}" -Force
+          choco install innosetup -y --no-progress
+          $version = python -c "from pathlib import Path; import re; text = Path('core/app_version.py').read_text(encoding='utf-8'); m = re.search(r'APP_VERSION\\s*=\\s*[\"\']([^\"\']+)[\"\']', text); print(m.group(1) if m else '')"
+          if ([string]::IsNullOrWhiteSpace($version)) {
+            throw "APP_VERSION is empty or unreadable from core/app_version.py"
+          }
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "tools\installer.iss" "/DAppVersion=$version"
+
+      - name: Create Windows zip package
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Compress-Archive -Path "dist/BudgetPlanner/*" -DestinationPath "dist/${{ matrix.portable_name }}" -Force
 
       - name: Rename Linux executable
         if: runner.os == 'Linux'
         shell: bash
         run: |
-          mv "dist/BudgetPlanner" "dist/${{ matrix.portable_name }}"
-          chmod +x "dist/${{ matrix.portable_name }}"
+          if [ ! -f "dist/BudgetPlanner/BudgetPlanner" ]; then
+            echo "Expected dist/BudgetPlanner/BudgetPlanner was not produced by PyInstaller." >&2
+            exit 1
+          fi
+          chmod +x "dist/BudgetPlanner/BudgetPlanner"
+          tar -czf "dist/${{ matrix.portable_name }}.tar.gz" -C dist BudgetPlanner
 
       - name: Upload Windows portable artifact
         if: runner.os == 'Windows'
@@ -77,6 +92,7 @@ jobs:
           name: ${{ matrix.artifact_name }}
           path: |
             dist/${{ matrix.portable_name }}
+            dist/BudgetPlanner-Setup-windows-x86_64.exe
           if-no-files-found: error
 
       - name: Upload Linux build artifacts
@@ -85,7 +101,7 @@ jobs:
         with:
           name: ${{ matrix.artifact_name }}
           path: |
-            dist/${{ matrix.portable_name }}
+            dist/${{ matrix.portable_name }}.tar.gz
           if-no-files-found: error
 
   publish:
@@ -133,8 +149,9 @@ jobs:
           tag_name: ${{ steps.version.outputs.tag }}
           name: ${{ steps.version.outputs.tag }}
           files: |
-            release_assets/BudgetPlanner-windows-x86_64.exe
-            release_assets/BudgetPlanner-linux-x86_64
+            release_assets/BudgetPlanner-windows-x86_64.zip
+            release_assets/BudgetPlanner-Setup-windows-x86_64.exe
+            release_assets/BudgetPlanner-linux-x86_64.tar.gz
           generate_release_notes: true
           overwrite_files: true
           fail_on_unmatched_files: true

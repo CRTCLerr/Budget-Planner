@@ -77,6 +77,18 @@ def _pick_windows_asset(assets: list[dict], prefer_installer: bool = False) -> d
             ):
                 return asset
 
+        for asset in assets:
+            name = str(asset.get("name", "")).lower()
+            if name.endswith(".zip"):
+                return asset
+
+    else:
+        # Portable installs should prefer zip/portable assets over installer EXEs.
+        for asset in assets:
+            name = str(asset.get("name", "")).lower()
+            if name.endswith(".zip"):
+                return asset
+
     for asset in assets:
         name = str(asset.get("name", "")).lower()
         if name.endswith(".exe") and not (
@@ -96,11 +108,6 @@ def _pick_windows_asset(assets: list[dict], prefer_installer: bool = False) -> d
                 "setup" in name or "installer" in name or "install" in name
             ):
                 return asset
-
-    for asset in assets:
-        name = str(asset.get("name", "")).lower()
-        if name.endswith(".zip"):
-            return asset
 
     return None
 
