@@ -62,7 +62,15 @@ jobs:
         shell: pwsh
         run: |
           choco install innosetup -y --no-progress
-          $version = python -c "from pathlib import Path; import re; text = Path('core/app_version.py').read_text(encoding='utf-8'); m = re.search(r'APP_VERSION\\s*=\\s*[\"\']([^\"\']+)[\"\']', text); print(m.group(1) if m else '')"
+          $version = @'
+from pathlib import Path
+import re
+
+text = Path("core/app_version.py").read_text(encoding="utf-8")
+match = re.search(r"APP_VERSION\s*=\s*['\"]([^'\"]+)['\"]", text)
+print(match.group(1) if match else "")
+'@ | python -
+          $version = $version.Trim()
           if ([string]::IsNullOrWhiteSpace($version)) {
             throw "APP_VERSION is empty or unreadable from core/app_version.py"
           }
