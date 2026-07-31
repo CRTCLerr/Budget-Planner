@@ -40,21 +40,21 @@ If you already use PyInstaller in your environment, build with the spec file fro
 Current behavior:
 
 - Local build output is a single executable file (one-file mode) in `dist/`.
-- Windows local build output is `dist/Budget Planner.exe`.
+- Windows local build output is `dist/BudgetPlanner.exe`.
 
 ## Releases and Downloads
 
 Users should download the app from GitHub Releases, not from source ZIPs.
 
-- Windows installer asset: `Budget-Planner-Setup-windows-x86_64.exe`
-- Windows portable asset: `Budget-Planner-windows-x86_64.exe`
-- Linux asset: `Budget-Planner-linux-x86_64`
+- Windows installer asset: `BudgetPlanner-Setup-windows-x86_64.exe`
+- Windows portable asset: `BudgetPlanner-windows-x86_64.exe`
+- Linux asset: `BudgetPlanner-linux-x86_64`
 
 Each release should include both assets so the in-app updater can select the correct platform package.
 
 Recommended user flow:
 
-- New Windows users: use the installer (`Budget-Planner-Setup-windows-x86_64.exe`).
+- New Windows users: use the installer (`BudgetPlanner-Setup-windows-x86_64.exe`).
 - Existing portable Windows users: keep using the portable `.exe` update track.
 - Linux users: use the Linux binary asset.
 
@@ -63,25 +63,19 @@ Recommended user flow:
 This repository now includes a GitHub Actions workflow:
 
 - Workflow file: `.github/workflows/release-build.yml`
-- Trigger: push a version tag like `v1.04.02`
+- Trigger: push a version bump to `core/app_version.py` on `main`
 - Output:
 	- Windows portable one-file binary
 	- Windows installer with Program Files default and install-folder picker
 	- Linux one-file binary
 	- All published directly to the GitHub Release
 
-There is also an automation workflow that creates the release tag from the version file:
-
-- Workflow file: `.github/workflows/create-release-tag.yml`
-- Trigger: push a change to `core/app_version.py` on `main`
-- Behavior: reads `APP_VERSION`, creates `v<version>` if it does not already exist, and pushes that tag
-
 That means the normal release flow is:
 
 1. Test and merge the release commit to `main`.
 2. Update `core/app_version.py` to the version you want to ship.
 3. Push the version bump.
-4. GitHub Actions creates the tag and then the build workflow publishes the release assets automatically.
+4. GitHub Actions builds the release, creates the matching tag, and publishes the release assets automatically.
 
 Important:
 

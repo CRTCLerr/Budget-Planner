@@ -9,7 +9,7 @@ import PyInstaller.__main__
 # CONFIGURATION
 # -----------------------------
 
-APP_NAME = "Budget Planner"
+APP_NAME = "BudgetPlanner"
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 ENTRY_POINT = PROJECT_ROOT / "main.py"

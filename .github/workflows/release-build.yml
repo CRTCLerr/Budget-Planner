@@ -2,8 +2,10 @@ name: Build and Publish Release Assets
 
 on:
   push:
-    tags:
-      - "v*"
+    branches:
+      - main
+    paths:
+      - core/app_version.py
   workflow_dispatch:
 
 permissions:
@@ -19,10 +21,10 @@ jobs:
         include:
           - os: windows-latest
             artifact_name: windows-release-assets
-            portable_name: Budget-Planner-windows-x86_64.exe
+            portable_name: BudgetPlanner-windows-x86_64.exe
           - os: ubuntu-latest
             artifact_name: linux-release-assets
-            portable_name: Budget-Planner-linux-x86_64
+            portable_name: BudgetPlanner-linux-x86_64
 
     steps:
       - name: Checkout
@@ -55,20 +57,20 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          $version = "${{ github.ref_name }}".TrimStart('v')
+          $version = python -c "from pathlib import Path; import re; text = Path('core/app_version.py').read_text(encoding='utf-8'); m = re.search(r'APP_VERSION\\s*=\\s*[\"\']([^\"\']+)[\"\']', text); print(m.group(1) if m else '')"
           & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "tools\installer.iss" "/DAppVersion=$version"
 
       - name: Copy portable executable
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          Copy-Item -Path "dist/Budget Planner.exe" -Destination "dist/${{ matrix.portable_name }}" -Force
+          Copy-Item -Path "dist/BudgetPlanner.exe" -Destination "dist/${{ matrix.portable_name }}" -Force
 
       - name: Rename Linux executable
         if: runner.os == 'Linux'
         shell: bash
         run: |
-          mv "dist/Budget Planner" "dist/${{ matrix.portable_name }}"
+          mv "dist/BudgetPlanner" "dist/${{ matrix.portable_name }}"
           chmod +x "dist/${{ matrix.portable_name }}"
 
       - name: Upload Windows build artifacts
@@ -78,7 +80,7 @@ jobs:
           name: ${{ matrix.artifact_name }}
           path: |
             dist/${{ matrix.portable_name }}
-            dist/Budget-Planner-Setup-windows-x86_64.exe
+            dist/BudgetPlanner-Setup-windows-x86_64.exe
           if-no-files-found: error
 
       - name: Upload Linux build artifacts
@@ -95,6 +97,39 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Read app version
+        id: version
+        shell: bash
+        run: |
+          VERSION=$(python - <<'PY'
+from pathlib import Path
+import re
+text = Path('core/app_version.py').read_text(encoding='utf-8')
+match = re.search(r'APP_VERSION\s*=\s*["\']([^"\']+)["\']', text)
+if not match:
+    raise SystemExit('APP_VERSION not found')
+print(match.group(1))
+PY
+)
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Create tag if missing
+        shell: bash
+        run: |
+          TAG="${{ steps.version.outputs.tag }}"
+          if ! git ls-remote --tags origin "refs/tags/$TAG" | grep -q "$TAG"; then
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git tag -a "$TAG" -m "Release $TAG"
+            git push origin "$TAG"
+          fi
+
       - name: Download build artifacts
         uses: actions/download-artifact@v4
         with:
@@ -104,10 +139,12 @@ jobs:
       - name: Publish release assets
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: ${{ steps.version.outputs.tag }}
           files: |
-            release_assets/Budget-Planner-windows-x86_64.exe
-            release_assets/Budget-Planner-Setup-windows-x86_64.exe
-            release_assets/Budget-Planner-linux-x86_64
+            release_assets/BudgetPlanner-windows-x86_64.exe
+            release_assets/BudgetPlanner-Setup-windows-x86_64.exe
+            release_assets/BudgetPlanner-linux-x86_64
           generate_release_notes: true
           overwrite_files: true
           fail_on_unmatched_files: true
