@@ -1,5 +1,8 @@
 import os
 import shutil
+import sys
+from pathlib import Path
+
 import PyInstaller.__main__
 
 # -----------------------------
@@ -7,25 +10,31 @@ import PyInstaller.__main__
 # -----------------------------
 
 APP_NAME = "Budget Planner"
-ENTRY_POINT = "main.py"   # Your app's launcher file
-ICON_FILE = "assets/moneylogo.ico"  # Optional, remove if not using
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+ENTRY_POINT = PROJECT_ROOT / "main.py"
+ICON_FILE = PROJECT_ROOT / "assets" / "moneylogo.ico"
+SPEC_OUTPUT_DIR = PROJECT_ROOT / "build" / "spec"
 
 # Folders to include in the .exe
 INCLUDE_FOLDERS = [
-    "ui",
-    "data",
-    "assets",
+    PROJECT_ROOT / "ui",
+    PROJECT_ROOT / "data",
+    PROJECT_ROOT / "assets",
 ]
 
 # -----------------------------
 # CLEAN OLD BUILDS
 # -----------------------------
-for folder in ("build", "dist", f"{APP_NAME}.spec"):
-    if os.path.exists(folder):
-        if os.path.isdir(folder):
+for folder in (
+    PROJECT_ROOT / "build",
+    PROJECT_ROOT / "dist",
+):
+    if folder.exists():
+        if folder.is_dir():
             shutil.rmtree(folder)
         else:
-            os.remove(folder)
+            folder.unlink()
 
 # -----------------------------
 # COLLECT DATA FILES
@@ -33,20 +42,24 @@ for folder in ("build", "dist", f"{APP_NAME}.spec"):
 datas = []
 
 for folder in INCLUDE_FOLDERS:
-    if os.path.exists(folder):
-        datas.append(f"{folder}{os.pathsep}{folder}")
+    if folder.exists():
+        datas.append(f"{folder}{os.pathsep}{folder.name}")
 
 # -----------------------------
 # BUILD COMMAND
 # -----------------------------
 cmd = [
-    ENTRY_POINT,
-    "--onedir",
+    str(ENTRY_POINT),
+    "--onefile",
     "--noconsole",
+    "--clean",
+    "--noconfirm",
+    "--specpath",
+    str(SPEC_OUTPUT_DIR),
 ]
 
-# Add icon if present
-if os.path.exists(ICON_FILE):
+# Add icon if present (best support on Windows builds)
+if sys.platform.startswith("win") and ICON_FILE.exists():
     cmd.append(f"--icon={ICON_FILE}")
 
 # Add data folders
@@ -54,13 +67,14 @@ for d in datas:
     cmd.append(f"--add-data={d}")
 
 # Hidden imports needed for direct Windows printer selection/printing.
-for hidden_import in (
-    "win32con",
-    "win32print",
-    "win32ui",
-    "pywintypes",
-):
-    cmd.append(f"--hidden-import={hidden_import}")
+if sys.platform.startswith("win"):
+    for hidden_import in (
+        "win32con",
+        "win32print",
+        "win32ui",
+        "pywintypes",
+    ):
+        cmd.append(f"--hidden-import={hidden_import}")
 
 # This app is Tkinter-based; exclude Qt bindings so PyInstaller does not
 # pull in PySide6 from the local Python environment.
@@ -82,4 +96,5 @@ print(cmd)
 PyInstaller.__main__.run(cmd)
 
 print("\n\nBuild complete!")
-print(f"Your EXE is located in: dist/{APP_NAME}.exe")
+exe_name = f"{APP_NAME}.exe" if sys.platform.startswith("win") else APP_NAME
+print(f"Your executable is located at: {PROJECT_ROOT / 'dist' / exe_name}")

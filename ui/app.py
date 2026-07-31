@@ -21,6 +21,7 @@ import tkinter as tk
 from datetime import datetime
 from typing import Dict, Type
 
+from core.app_settings import AppSettings
 from data.database import Database
 from data.categories import CategoryRepository
 from data.transactions import TransactionRepository
@@ -46,6 +47,12 @@ from ui.budgets import BudgetsPage
 from ui.charts import ChartsPage
 from ui.debt import DebtPage
 from ui.savings import SavingsPage
+from ui.settings import SettingsPage
+
+
+class _TutorialControllerProtocol:
+    def start_if_needed(self) -> None:
+        raise NotImplementedError
 
 
 class App(tk.Tk):
@@ -59,7 +66,7 @@ class App(tk.Tk):
     - Handle navigation
     """
 
-    def __init__(self, db: Database) -> None:
+    def __init__(self, db: Database, settings: AppSettings) -> None:
         super().__init__()
 
         # Window configuration
@@ -76,6 +83,8 @@ class App(tk.Tk):
         self.debt_repo = DebtRepository(db)
         self.budget_repo = BudgetRepository(db)
         self.savings_service = SavingsService(self.tx_repo)
+        self.settings = settings
+        self.tutorial_controller: _TutorialControllerProtocol | None = None
 
         # --- UI Containers ----------------------------------------------------
         self.sidebar: tk.Frame
@@ -161,6 +170,7 @@ class App(tk.Tk):
             ("🎯", "Budget Limits"),
             ("📈", "Charts"),
             ("💸", "Savings"),
+            ("⚙️", "Settings"),
         ]
 
         for icon, label in nav_items:
@@ -241,6 +251,7 @@ class App(tk.Tk):
             "Charts": ChartsPage,
             "Debt": DebtPage,
             "Savings": SavingsPage,
+            "Settings": SettingsPage,
         }
 
         for name, cls in page_classes.items():

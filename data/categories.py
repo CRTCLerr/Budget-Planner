@@ -38,7 +38,7 @@ class CategorySuggestion:
     ignored: bool
 
 
-CATEGORY_TEMPLATES = [
+DEFAULT_CATEGORIES = [
     ("Housing", "expense", "needs", None, 0, 10),
     ("Groceries", "expense", "needs", None, 0, 20),
     ("Transportation", "expense", "needs", None, 0, 30),
@@ -112,17 +112,17 @@ class CategoryRepository:
     def names(self, kind: Optional[str] = None, include_inactive: bool = False) -> List[str]:
         return [category.name for category in self.all(kind, include_inactive=include_inactive)]
 
-    def template_categories(self, kind: Optional[str] = None) -> List[Category]:
-        """Return optional template categories that can be imported by the user."""
-        templates: List[Category] = []
-        for idx, (name, template_kind, advisor_group, debt_type, is_savings, sort_order) in enumerate(CATEGORY_TEMPLATES, start=1):
-            if kind and template_kind != self._normalize_kind(kind):
+    def default_categories(self, kind: Optional[str] = None) -> List[Category]:
+        """Return built-in default categories that users can opt into."""
+        defaults: List[Category] = []
+        for idx, (name, default_kind, advisor_group, debt_type, is_savings, sort_order) in enumerate(DEFAULT_CATEGORIES, start=1):
+            if kind and default_kind != self._normalize_kind(kind):
                 continue
-            templates.append(
+            defaults.append(
                 Category(
                     id=-idx,
                     name=name,
-                    kind=template_kind,
+                    kind=default_kind,
                     advisor_group=advisor_group,
                     debt_type=debt_type,
                     is_savings=bool(is_savings),
@@ -130,15 +130,15 @@ class CategoryRepository:
                     sort_order=sort_order,
                 )
             )
-        return templates
+        return defaults
 
-    def import_templates(self, names: List[str], kind: str) -> List[Category]:
-        """Import selected template names as active categories."""
+    def add_default_categories(self, names: List[str], kind: str) -> List[Category]:
+        """Activate selected built-in defaults as categories."""
         normalized_kind = self._normalize_kind(kind)
         created: List[Category] = []
-        template_lookup = {
-            (template_name.lower(), template_kind): (template_name, advisor_group, debt_type, bool(is_savings))
-            for template_name, template_kind, advisor_group, debt_type, is_savings, _ in CATEGORY_TEMPLATES
+        default_lookup = {
+            (default_name.lower(), default_kind): (default_name, advisor_group, debt_type, bool(is_savings))
+            for default_name, default_kind, advisor_group, debt_type, is_savings, _ in DEFAULT_CATEGORIES
         }
 
         for raw_name in names:
@@ -146,12 +146,12 @@ class CategoryRepository:
             if not name:
                 continue
             key = (name.lower(), normalized_kind)
-            if key not in template_lookup:
+            if key not in default_lookup:
                 continue
-            template_name, advisor_group, debt_type, is_savings = template_lookup[key]
+            default_name, advisor_group, debt_type, is_savings = default_lookup[key]
             created.append(
                 self.ensure_category(
-                    template_name,
+                    default_name,
                     normalized_kind,
                     advisor_group=advisor_group,
                     debt_type=debt_type,
@@ -161,18 +161,50 @@ class CategoryRepository:
             )
         return created
 
-    def available_template_names(self, kind: str) -> List[str]:
-        """Return template names that are not currently active for this kind."""
+    def available_default_names(self, kind: str) -> List[str]:
+        """Return built-in defaults that are not active and not ignored."""
         normalized_kind = self._normalize_kind(kind)
         names: List[str] = []
-        for template_name, template_kind, *_ in CATEGORY_TEMPLATES:
-            if template_kind != normalized_kind:
+        for default_name, default_kind, *_ in DEFAULT_CATEGORIES:
+            if default_kind != normalized_kind:
                 continue
-            existing = self.get(template_name, normalized_kind, include_inactive=True)
+            existing = self.get(default_name, normalized_kind, include_inactive=True)
             if existing is not None and existing.active:
                 continue
-            names.append(template_name)
+            if self._is_default_ignored(default_name, normalized_kind):
+                continue
+            names.append(default_name)
         return names
+
+    def ignore_default(self, name: str, kind: str) -> None:
+        """Hide a built-in default from the picker without creating it."""
+        cleaned = name.strip()
+        if not cleaned:
+            return
+
+        normalized_kind = self._normalize_kind(kind)
+        self.db.conn.execute(
+            """
+            INSERT INTO category_suggestions (name, normalized_name, kind, source, ignored)
+            VALUES (?, ?, ?, 'default', 1)
+            ON CONFLICT(kind, normalized_name)
+            DO UPDATE SET name = excluded.name, source = 'default', ignored = 1;
+            """,
+            (cleaned, cleaned.lower(), normalized_kind),
+        )
+        self.db.conn.commit()
+
+    def _is_default_ignored(self, name: str, kind: str) -> bool:
+        row = self.db.conn.execute(
+            """
+            SELECT ignored
+            FROM category_suggestions
+            WHERE kind = ? AND normalized_name = ? AND source = 'default'
+            LIMIT 1;
+            """,
+            (kind, name.strip().lower()),
+        ).fetchone()
+        return bool(row and int(row["ignored"]) == 1)
 
     def list_suggestions(self, kind: Optional[str] = None, include_ignored: bool = False) -> List[CategorySuggestion]:
         """Return discovered category suggestions that are not active categories."""
@@ -494,7 +526,7 @@ class CategoryRepository:
 
     def _retire_unused_seeded_categories(self) -> None:
         """Deactivate old seeded categories that are not backed by user data."""
-        default_names = {(name, kind) for name, kind, *_ in CATEGORY_TEMPLATES}
+        default_names = {(name, kind) for name, kind, *_ in DEFAULT_CATEGORIES}
         for category in self.all(include_inactive=True):
             key = (category.name, category.kind)
             if key not in default_names or not category.active:

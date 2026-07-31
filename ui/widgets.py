@@ -188,6 +188,40 @@ class ScrollablePage(tk.Frame):
     def deactivate_mousewheel(self) -> None:
         self._scroll_canvas.unbind_all("<MouseWheel>")
 
+    def scroll_widget_into_view(self, widget: tk.Widget, padding: int = 24) -> None:
+        """Scroll the page so the requested widget is visible."""
+        if widget is None:
+            return
+
+        self.update_idletasks()
+        self._scroll_canvas.update_idletasks()
+
+        try:
+            inner_top = self.inner.winfo_rooty()
+            widget_top = widget.winfo_rooty() - inner_top
+            widget_bottom = widget_top + widget.winfo_height()
+        except Exception:
+            return
+
+        bbox = self._scroll_canvas.bbox(self._inner_id)
+        if not bbox:
+            return
+
+        content_height = max(1, bbox[3] - bbox[1])
+        canvas_height = max(1, self._scroll_canvas.winfo_height())
+        view_top = self._scroll_canvas.canvasy(0)
+        view_bottom = view_top + canvas_height
+
+        target_top = max(0, widget_top - padding)
+        target_bottom = min(content_height, widget_bottom + padding)
+
+        if target_top < view_top:
+            self._scroll_canvas.yview_moveto(target_top / max(1, content_height - canvas_height))
+        elif target_bottom > view_bottom:
+            self._scroll_canvas.yview_moveto(max(0, target_bottom - canvas_height) / max(1, content_height - canvas_height))
+
+        self.update_idletasks()
+
 
 # ---------------------------------------------------------------------------
 # StatCard

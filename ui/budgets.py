@@ -19,7 +19,7 @@ from typing import TYPE_CHECKING, Dict, List
 
 from ui.widgets import (
     Card, ScrollablePage, FONT, TEXT, TEXT_SEC, CARD_BG, BG,
-    PRIMARY, PRIMARY_HOVER,
+    PRIMARY, PRIMARY_HOVER, WARNING, DANGER,
 )
 from data.transactions import TransactionRepository
 from data.debt import DebtRepository
@@ -80,9 +80,10 @@ class BudgetsPage(ScrollablePage):
         self.event_amount_var = tk.StringVar()
         self.event_date_var = tk.StringVar()
         self.category_kind_var = tk.StringVar(value="expense")
+        self.show_inactive_categories_var = tk.BooleanVar(value=False)
         self.selected_category_var = tk.StringVar()
         self.category_name_var = tk.StringVar()
-        self.template_category_var = tk.StringVar()
+        self.default_category_var = tk.StringVar()
         self.suggestion_category_var = tk.StringVar()
         self.category_group_var = tk.StringVar(value="wants")
         self.category_debt_type_var = tk.StringVar(value="None")
@@ -97,6 +98,8 @@ class BudgetsPage(ScrollablePage):
         self.slider_vars: Dict[str, tk.IntVar] = {}
         self.slider_amount_labels: Dict[str, tk.Label] = {}
         self.slider_scales: Dict[str, ttk.Scale] = {}
+        self.total_summary_var = tk.StringVar(value="0.00% | $0")
+        self.total_summary_label: tk.Label | None = None
         self._updating_sliders = False  # guard to avoid recursion
         self._active_slider = None
         self._active_slider_max_ticks = 0
@@ -164,10 +167,55 @@ class BudgetsPage(ScrollablePage):
         self.income_override_var.set(f"{self.last_month_income:.2f}")
         self.effective_income = self._get_effective_income()
         self._load_sliders_from_saved_budgets()
+        self._enforce_total_cap()
         self._update_all_amount_labels()
 
     def _expense_category_names(self) -> List[str]:
         return self.app.category_repo.names("expense")
+
+    def _slider_total_percent(self) -> float:
+        return sum(var.get() * 0.25 for var in self.slider_vars.values())
+
+    def _slider_total_amount(self) -> float:
+        income = self._get_effective_income()
+        total_percent = self._slider_total_percent()
+        return income * (total_percent / 100.0) if income > 0 else 0.0
+
+    def _refresh_total_summary(self) -> None:
+        total_percent = self._slider_total_percent()
+        total_amount = self._slider_total_amount()
+
+        if total_percent >= 100.0:
+            color = DANGER
+        elif total_percent >= 79.9:
+            color = WARNING
+        else:
+            color = TEXT
+
+        self.total_summary_var.set(f"{total_percent:.2f}% | ${int(round(total_amount)):,d}")
+        if self.total_summary_label is not None:
+            self.total_summary_label.configure(fg=color)
+
+    def _enforce_total_cap(self) -> None:
+        total_percent = self._slider_total_percent()
+        if total_percent > 100.0 and self.slider_vars:
+            overflow_ticks = int(round((total_percent - 100.0) / 0.25))
+            if overflow_ticks > 0:
+                self._updating_sliders = True
+                try:
+                    for category in sorted(self.slider_vars, key=lambda name: self.slider_vars[name].get(), reverse=True):
+                        if overflow_ticks <= 0:
+                            break
+                        current_ticks = self.slider_vars[category].get()
+                        if current_ticks <= 0:
+                            continue
+                        reduction = min(current_ticks, overflow_ticks)
+                        self.slider_vars[category].set(current_ticks - reduction)
+                        overflow_ticks -= reduction
+                finally:
+                    self._updating_sliders = False
+
+        self._refresh_total_summary()
 
     def _load_sliders_from_saved_budgets(self) -> None:
         income = self._get_effective_income()
@@ -186,6 +234,8 @@ class BudgetsPage(ScrollablePage):
                 var.set(ticks)
         finally:
             self._updating_sliders = False
+
+        self._enforce_total_cap()
 
     def _rebuild_slider_rows(self) -> None:
         if self.slider_rows_frame is None:
@@ -249,7 +299,8 @@ class BudgetsPage(ScrollablePage):
 
     def _refresh_category_manager(self) -> None:
         kind = self.category_kind_var.get() or "expense"
-        values = self.app.category_repo.names(kind)
+        include_inactive = bool(self.show_inactive_categories_var.get())
+        values = self.app.category_repo.names(kind, include_inactive=include_inactive)
         self.category_select_combo.configure(values=values)
 
         current = self.selected_category_var.get().strip()
@@ -262,23 +313,23 @@ class BudgetsPage(ScrollablePage):
             self.selected_category_var.set("")
             self.category_select_combo.set("")
 
-        self._refresh_template_options(kind)
+        self._refresh_default_options(kind)
         self._refresh_suggestion_options(kind)
         self._load_selected_category_details()
 
-    def _refresh_template_options(self, kind: str) -> None:
-        values = self.app.category_repo.available_template_names(kind)
-        self.template_select_combo.configure(values=values)
+    def _refresh_default_options(self, kind: str) -> None:
+        values = self.app.category_repo.available_default_names(kind)
+        self.default_select_combo.configure(values=values)
 
-        current = self.template_category_var.get().strip()
+        current = self.default_category_var.get().strip()
         if current and current in values:
-            self.template_select_combo.set(current)
+            self.default_select_combo.set(current)
         elif values:
-            self.template_category_var.set(values[0])
-            self.template_select_combo.set(values[0])
+            self.default_category_var.set(values[0])
+            self.default_select_combo.set(values[0])
         else:
-            self.template_category_var.set("")
-            self.template_select_combo.set("")
+            self.default_category_var.set("")
+            self.default_select_combo.set("")
 
     def _refresh_suggestion_options(self, kind: str) -> None:
         suggestions = self.app.category_repo.list_suggestions(kind)
@@ -304,13 +355,14 @@ class BudgetsPage(ScrollablePage):
     def _load_selected_category_details(self) -> None:
         selected_name = self.selected_category_var.get().strip()
         kind = self.category_kind_var.get().strip() or "expense"
-        category = self.app.category_repo.get(selected_name, kind, include_inactive=False)
+        category = self.app.category_repo.get(selected_name, kind, include_inactive=True)
 
         if category is None:
             self.category_name_var.set("")
             self.category_group_var.set("wants")
             self.category_debt_type_var.set("None")
             self.category_is_savings_var.set(False)
+            self.category_status_var.set("Status: N/A")
             self._sync_category_detail_controls()
             return
 
@@ -318,7 +370,11 @@ class BudgetsPage(ScrollablePage):
         self.category_group_var.set(category.advisor_group)
         self.category_debt_type_var.set(CATEGORY_DEBT_CODE_TO_LABEL.get(category.debt_type, "None"))
         self.category_is_savings_var.set(category.is_savings)
+        self.category_status_var.set("Status: Active" if category.active else "Status: Archived")
         self._sync_category_detail_controls()
+
+    def _on_show_inactive_toggle(self) -> None:
+        self._refresh_category_manager()
 
     def _sync_category_detail_controls(self) -> None:
         is_income = self.category_kind_var.get().strip() == "income"
@@ -431,20 +487,55 @@ class BudgetsPage(ScrollablePage):
 
         messagebox.showinfo("Category Archived", f"Archived '{current_name}' from active categories.")
 
-    def _import_template_category(self) -> None:
+    def _reactivate_category(self) -> None:
+        current_name = self.selected_category_var.get().strip()
         kind = self.category_kind_var.get().strip() or "expense"
-        name = self.template_category_var.get().strip()
-        if not name:
-            messagebox.showerror("No Template", "Select a template category to import.")
+
+        if not current_name:
+            messagebox.showerror("No Category", "Select a category to reactivate.")
             return
 
-        self.app.category_repo.import_templates([name], kind)
+        try:
+            category = self.app.category_repo.reactivate_category(current_name, kind)
+        except ValueError as exc:
+            messagebox.showerror("Reactivate Failed", str(exc))
+            return
+
+        self.selected_category_var.set(category.name)
+
+        if hasattr(self.app, "refresh_all"):
+            self.app.refresh_all()
+
+        messagebox.showinfo("Category Reactivated", f"Reactivated '{category.name}'.")
+
+    def _add_default_category(self) -> None:
+        kind = self.category_kind_var.get().strip() or "expense"
+        name = self.default_category_var.get().strip()
+        if not name:
+            messagebox.showerror("No Default", "Select a default category to add.")
+            return
+
+        self.app.category_repo.add_default_categories([name], kind)
         self.selected_category_var.set(name)
 
         if hasattr(self.app, "refresh_all"):
             self.app.refresh_all()
 
-        messagebox.showinfo("Template Imported", f"Imported '{name}' to active {kind} categories.")
+        messagebox.showinfo("Default Added", f"Added '{name}' to active {kind} categories.")
+
+    def _ignore_default_category(self) -> None:
+        kind = self.category_kind_var.get().strip() or "expense"
+        name = self.default_category_var.get().strip()
+        if not name:
+            messagebox.showerror("No Default", "Select a default category to hide.")
+            return
+
+        self.app.category_repo.ignore_default(name, kind)
+
+        if hasattr(self.app, "refresh_all"):
+            self.app.refresh_all()
+
+        messagebox.showinfo("Default Hidden", f"Hid '{name}' from the default picker.")
 
     def _import_suggestion_category(self) -> None:
         kind = self.category_kind_var.get().strip() or "expense"
@@ -818,6 +909,15 @@ class BudgetsPage(ScrollablePage):
             bg=CARD_BG,
         ).pack(anchor="w", pady=(0, 6))
 
+        self.total_summary_label = tk.Label(
+            manual_card,
+            textvariable=self.total_summary_var,
+            font=(FONT, 11, "bold"),
+            fg=TEXT,
+            bg=CARD_BG,
+        )
+        self.total_summary_label.pack(anchor="w", pady=(0, 6))
+
         # Dynamic mode checkbox
         dyn_frame = tk.Frame(manual_card, bg=CARD_BG)
         dyn_frame.pack(fill="x", pady=(0, 8))
@@ -903,6 +1003,29 @@ class BudgetsPage(ScrollablePage):
         )
         self.category_select_combo.grid(row=1, column=1, sticky="ew", pady=(2, 10), padx=(0, 16))
         self.category_select_combo.bind("<<ComboboxSelected>>", lambda e: self._on_category_selected())
+
+        self.category_status_var = tk.StringVar(value="Status: N/A")
+        tk.Label(
+            grid,
+            textvariable=self.category_status_var,
+            font=(FONT, 9),
+            fg=TEXT_SEC,
+            bg=CARD_BG,
+        ).grid(row=0, column=3, sticky="w")
+
+        tk.Checkbutton(
+            grid,
+            text="Show archived categories",
+            variable=self.show_inactive_categories_var,
+            onvalue=True,
+            offvalue=False,
+            command=self._on_show_inactive_toggle,
+            font=(FONT, 9),
+            fg=TEXT_SEC,
+            bg=CARD_BG,
+            activebackground=CARD_BG,
+            selectcolor=CARD_BG,
+        ).grid(row=1, column=3, sticky="w", pady=(2, 10))
 
         tk.Label(grid, text="Name", font=(FONT, 10, "bold"), fg=TEXT_SEC, bg=CARD_BG).grid(row=0, column=2, sticky="w")
         tk.Entry(
@@ -995,23 +1118,37 @@ class BudgetsPage(ScrollablePage):
             command=self._delete_category,
         ).pack(side="left", padx=(8, 0))
 
+        tk.Button(
+            actions,
+            text="Reactivate Category",
+            font=(FONT, 10, "bold"),
+            bg="#0f766e",
+            fg="#ffffff",
+            activebackground="#115e59",
+            relief="flat",
+            cursor="hand2",
+            padx=10,
+            pady=4,
+            command=self._reactivate_category,
+        ).pack(side="left", padx=(8, 0))
+
         extras = tk.Frame(manager, bg=CARD_BG)
         extras.pack(fill="x", pady=(12, 0))
         extras.grid_columnconfigure(1, weight=1)
 
-        tk.Label(extras, text="Optional Templates", font=(FONT, 10, "bold"), fg=TEXT_SEC, bg=CARD_BG).grid(row=0, column=0, sticky="w")
-        self.template_select_combo = ttk.Combobox(
+        tk.Label(extras, text="Default Categories", font=(FONT, 10, "bold"), fg=TEXT_SEC, bg=CARD_BG).grid(row=0, column=0, sticky="w")
+        self.default_select_combo = ttk.Combobox(
             extras,
-            textvariable=self.template_category_var,
+            textvariable=self.default_category_var,
             values=[],
             state="readonly",
             width=32,
             font=(FONT, 10),
         )
-        self.template_select_combo.grid(row=0, column=1, sticky="ew", padx=(10, 10))
+        self.default_select_combo.grid(row=0, column=1, sticky="ew", padx=(10, 10))
         tk.Button(
             extras,
-            text="Import Template",
+            text="Add Default",
             font=(FONT, 10, "bold"),
             bg=PRIMARY,
             fg="#ffffff",
@@ -1020,8 +1157,22 @@ class BudgetsPage(ScrollablePage):
             cursor="hand2",
             padx=10,
             pady=4,
-            command=self._import_template_category,
+            command=self._add_default_category,
         ).grid(row=0, column=2, sticky="e")
+
+        tk.Button(
+            extras,
+            text="Hide Default",
+            font=(FONT, 10, "bold"),
+            bg="#475569",
+            fg="#ffffff",
+            activebackground="#334155",
+            relief="flat",
+            cursor="hand2",
+            padx=10,
+            pady=4,
+            command=self._ignore_default_category,
+        ).grid(row=0, column=3, sticky="e", padx=(8, 0))
 
         tk.Label(extras, text="History Suggestions", font=(FONT, 10, "bold"), fg=TEXT_SEC, bg=CARD_BG).grid(row=1, column=0, sticky="w", pady=(10, 0))
         self.suggestion_select_combo = ttk.Combobox(
@@ -1183,6 +1334,7 @@ class BudgetsPage(ScrollablePage):
         finally:
             self._updating_sliders = False
 
+        self._enforce_total_cap()
         self._update_all_amount_labels()
 
     # ------------------------------------------------------------------
@@ -1234,6 +1386,7 @@ class BudgetsPage(ScrollablePage):
         finally:
             self._updating_sliders = False
 
+        self._enforce_total_cap()
         self._update_all_amount_labels()
 
     def _clamp_static(self, changed_cat: str, new_ticks: int) -> None:
@@ -1315,6 +1468,8 @@ class BudgetsPage(ScrollablePage):
             if label is not None:
                 label.config(text=f"${amount_rounded:,d}")
 
+        self._refresh_total_summary()
+
     def _on_slider_press(self, category: str):
         """Record which slider is active and compute its maximum allowed ticks."""
         self._active_slider = category
@@ -1351,6 +1506,7 @@ class BudgetsPage(ScrollablePage):
                 self.slider_vars[category].set(self._active_slider_max_ticks)
 
             self._active_slider = None
+            self._enforce_total_cap()
             self._update_all_amount_labels()
 
     # ------------------------------------------------------------------
@@ -1381,6 +1537,11 @@ class BudgetsPage(ScrollablePage):
         messagebox.showinfo("Manual Budget Applied", "Manual slider-based budget has been applied to your categories.")
 
     def refresh(self) -> None:
+        # Keep the user's viewport stable while controls are rebuilt.
+        scroll_pos = self._scroll_canvas.yview()[0]
         self._refresh_category_manager()
         self._rebuild_slider_rows()
+        self.update_idletasks()
+        self._scroll_canvas.yview_moveto(scroll_pos)
+        self._refresh_total_summary()
         
